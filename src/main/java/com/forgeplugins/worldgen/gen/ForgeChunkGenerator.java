@@ -84,12 +84,12 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         int baseX = chunkX << 4;
         int baseZ = chunkZ << 4;
 
-        // Height grid with a 1-block border, measured once per chunk so the
+        // Height grid with a 3-block border, measured once per chunk so the
         // slope and biome pick reuse it instead of re-sampling noise.
-        int[][] hg = new int[18][18];
-        for (int bz = -1; bz <= 16; bz++) {
-            for (int bx = -1; bx <= 16; bx++) {
-                hg[bx + 1][bz + 1] = terrain.heightAt(baseX + bx, baseZ + bz);
+        int[][] hg = new int[22][22];
+        for (int bz = -3; bz <= 18; bz++) {
+            for (int bx = -3; bx <= 18; bx++) {
+                hg[bx + 3][bz + 3] = terrain.heightAt(baseX + bx, baseZ + bz);
             }
         }
 
@@ -97,7 +97,7 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
             for (int x = 0; x < 16; x++) {
                 int wx = baseX + x;
                 int wz = baseZ + z;
-                int h0 = hg[x + 1][z + 1];
+                int h0 = hg[x + 3][z + 3];
                 int h = h0;
                 double volcanoDist = terrain.volcanoDistance(wx, wz);
 
@@ -143,7 +143,7 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                     chunkData.setRegion(x, stoneTop, z, x + 1, h, z + 1, Material.DIRT);
                 }
 
-                double slope = (Math.abs(hg[x + 4][z + 1] - h0) + Math.abs(hg[x + 1][z + 4] - h0)) / 6.0;
+                double slope = (Math.abs(hg[x + 6][z + 3] - h0) + Math.abs(hg[x + 3][z + 6] - h0)) / 6.0;
                 ForgeBiome biome = biomeProvider.pick(worldInfo, wx, wz, h0, slope);
                 TerrainModel.Region region = terrain.regionAt(wx, wz);
                 int lake = terrain.lakeLevelAt(wx, wz);
@@ -187,7 +187,7 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                         // 1-deep pool wherever the neighbours sit level.
                         for (int dx = -1; dx <= 1; dx++) {
                             for (int dz = -1; dz <= 1; dz++) {
-                                if (hg[x + 1 + dx][z + 1 + dz] == h0) {
+                                if (hg[x + 3 + dx][z + 3 + dz] == h0) {
                                     chunkData.setBlock(x + dx, h - 1, z + dz, Material.WATER);
                                     chunkData.setBlock(x + dx, h, z + dz, Material.AIR);
                                 }
