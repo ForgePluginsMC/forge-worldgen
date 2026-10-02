@@ -4,7 +4,7 @@ import org.bukkit.Material;
 import org.bukkit.block.Biome;
 
 /**
- * ForgeWorldGen's nineteen original biomes. Each maps to the closest vanilla
+ * ForgeWorldGen's twenty original biomes. Each maps to the closest vanilla
  * biome so mob spawning, vanilla decorations and structures keep working on
  * top of our terrain, while the names, climate rules and surface palettes are
  * our own.
@@ -15,8 +15,8 @@ public enum ForgeBiome {
     EMBER_HIGHLANDS(Biome.WINDSWEPT_HILLS, Material.STONE, TreeType.NONE, 0.0, 0.030),
     /** Snow-capped peaks above the cloud line. */
     FROSTCAP_PEAKS(Biome.FROZEN_PEAKS, Material.SNOW_BLOCK, TreeType.WINDSWEPT_PINE, 0.08, 0.020),
-    /** Rolling green valleys. */
-    VERDANT_VALE(Biome.MEADOW, Material.GRASS_BLOCK, TreeType.OAK, 0.20, 0.010),
+    /** Rolling green valleys. Mapped to birch forest: villages stay on real ground. */
+    VERDANT_VALE(Biome.BIRCH_FOREST, Material.GRASS_BLOCK, TreeType.OAK, 0.20, 0.010),
     /** Dense dark forest with a thick canopy. */
     MISTWOOD(Biome.DARK_FOREST, Material.GRASS_BLOCK, TreeType.OAK, 0.55, 0.010),
     /** Cold coniferous hills. */
@@ -46,7 +46,11 @@ public enum ForgeBiome {
     /** Banded red/cream/ochre strata mesas (Grand Canyon). */
     PAINTED_CANYON(Biome.BADLANDS, Material.RED_SAND, TreeType.NONE, 0.0, 0.010),
     /** Rolling sand dunes with slip faces (Sahara). */
-    DUNE_SEA(Biome.DESERT, Material.SAND, TreeType.CACTUS, 0.02, 0.0);
+    DUNE_SEA(Biome.DESERT, Material.SAND, TreeType.CACTUS, 0.02, 0.0),
+    /** Yellow brimstone-stained volcanic flats; barren, nothing grows here. */
+    BRIMSTONE_FLATS(Biome.BADLANDS, Material.YELLOW_TERRACOTTA, TreeType.NONE, 0.0, 0.015),
+    /** Crisp autumn forest: amber foliage, fallen-leaf forest floor. */
+    AMBERWOOD(Biome.SAVANNA, Material.GRASS_BLOCK, TreeType.OAK, 0.16, 0.015);
 
     private final Biome vanilla;
     private final Material surface;

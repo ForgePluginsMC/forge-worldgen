@@ -1,5 +1,6 @@
 package com.forgeplugins.worldgen;
 
+import com.forgeplugins.worldgen.gen.FarmKit;
 import com.forgeplugins.worldgen.gen.ForgeChunkGenerator;
 import com.forgeplugins.worldgen.gen.GenSettings;
 import net.kyori.adventure.text.Component;
@@ -7,6 +8,8 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.type.Farmland;
 import org.bukkit.block.data.type.Leaves;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -31,9 +34,11 @@ public final class ForgeWorldGen extends JavaPlugin {
         BlockData oakLeaves = persistentLeaves(Material.OAK_LEAVES);
         BlockData spruceLeaves = persistentLeaves(Material.SPRUCE_LEAVES);
         BlockData acaciaLeaves = persistentLeaves(Material.ACACIA_LEAVES);
+        BlockData jungleLeaves = persistentLeaves(Material.JUNGLE_LEAVES);
+        FarmKit farms = farmKit();
 
         this.generator = new ForgeChunkGenerator(GenSettings.fromConfig(getConfig()),
-                oakLeaves, spruceLeaves, acaciaLeaves);
+                oakLeaves, spruceLeaves, acaciaLeaves, jungleLeaves, farms);
         this.worlds = new WorldManager(this, generator);
 
         var handler = new ForgeGenCommand(this, worlds);
@@ -46,7 +51,7 @@ public final class ForgeWorldGen extends JavaPlugin {
         }
 
         worlds.reattachManaged();
-        getLogger().info("Enabled. Generator ready: mountains, volcanoes, 10 biomes, custom flora.");
+        getLogger().info("Enabled. Generator ready: mountains, volcanoes, 20 biomes, ponds, fields.");
     }
 
     @Override
@@ -94,6 +99,27 @@ public final class ForgeWorldGen extends JavaPlugin {
         if (data instanceof Leaves leaves) {
             leaves.setPersistent(true);
             leaves.setDistance(1);
+        }
+        return data;
+    }
+
+    /** Builds the farmland/crop template kit for wheat fields (main thread). */
+    private FarmKit farmKit() {
+        BlockData farmland = Bukkit.createBlockData(Material.FARMLAND);
+        if (farmland instanceof Farmland farm) {
+            farm.setMoisture(7);
+        }
+        return new FarmKit(farmland,
+                agedCrop(Material.WHEAT, 7), agedCrop(Material.WHEAT, 3),
+                agedCrop(Material.CARROTS, 7), agedCrop(Material.CARROTS, 3),
+                agedCrop(Material.POTATOES, 7), agedCrop(Material.POTATOES, 3),
+                agedCrop(Material.BEETROOTS, 3), agedCrop(Material.BEETROOTS, 1));
+    }
+
+    private BlockData agedCrop(Material material, int age) {
+        BlockData data = Bukkit.createBlockData(material);
+        if (data instanceof Ageable crop) {
+            crop.setAge(Math.min(age, crop.getMaximumAge()));
         }
         return data;
     }

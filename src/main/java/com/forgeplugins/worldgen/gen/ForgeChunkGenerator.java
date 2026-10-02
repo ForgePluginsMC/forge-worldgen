@@ -13,11 +13,11 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * ForgeWorldGen's chunk generator. The entire terrain pass — stone fill,
- * surface mosaic and decoration, water, alpine lakes, volcano craters, lava
- * pools, geysers, waterfalls and trees — happens in {@link #generateNoise}, a
- * single sweep over the chunk's 256 columns, so no work is ever repeated.
- * Noise fields are allocation-free and the instance is safe for parallel
- * chunk generation.
+ * surface mosaic and decoration, water, mountain ponds, volcano craters,
+ * lava pools, geysers, sulfur ponds, waterfalls, wheat fields and trees —
+ * happens in {@link #generateNoise}, a single sweep over the chunk's 256
+ * columns, so no work is ever repeated. Noise fields are allocation-free
+ * and the instance is safe for parallel chunk generation.
  */
 public final class ForgeChunkGenerator extends ChunkGenerator {
 
@@ -36,15 +36,20 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
 
     private final TreePlacer trees;
     private final ForgeBiomeProvider biomeProvider;
+    private final FarmKit farms;
 
     public ForgeChunkGenerator(@NotNull GenSettings settings,
                                @Nullable BlockData oakLeaves,
                                @Nullable BlockData spruceLeaves,
-                               @Nullable BlockData acaciaLeaves) {
+                               @Nullable BlockData acaciaLeaves,
+                               @Nullable BlockData jungleLeaves,
+                               @NotNull FarmKit farms) {
         this.settings = settings;
-        this.trees = new TreePlacer(oakLeaves, spruceLeaves, acaciaLeaves);
+        this.trees = new TreePlacer(oakLeaves, spruceLeaves, acaciaLeaves, jungleLeaves);
+        this.farms = farms;
         this.biomeProvider = new ForgeBiomeProvider(new TerrainModel(0L, settings.seaLevel(),
-                settings.volcanoRarity(), settings.mountainScale(), settings.mountainRarity()));
+                settings.snowMinElevation(), settings.volcanoRarity(), settings.mountainScale(),
+                settings.mountainRarity()));
     }
 
     /** Applies new settings (e.g. after /fgen reload); models rebuild lazily. */
@@ -63,8 +68,8 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
             synchronized (modelLock) {
                 current = model;
                 if (current == null || current.seed() != seed) {
-                    current = new TerrainModel(seed, snap.seaLevel(), snap.volcanoRarity(),
-                            snap.mountainScale(), snap.mountainRarity());
+                    current = new TerrainModel(seed, snap.seaLevel(), snap.snowMinElevation(),
+                            snap.volcanoRarity(), snap.mountainScale(), snap.mountainRarity());
                     model = current;
                 }
             }
@@ -127,6 +132,25 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                     h = maxY - 24;
                 }
 
+                // Mountain ponds: small bowls (5-15 blocks across) pooling
+                // flat, never the old lake floods. The bowl is carved here so
+                // the stone fill below follows it; water depth stays <= 4.
+                TerrainModel.@Nullable Pond pond = terrain.pondAt(wx, wz);
+                double pondDist = -1.0;
+                if (pond != null) {
+                    pondDist = Math.hypot(wx - pond.cx, wz - pond.cz);
+                    if (pondDist <= pond.r + 1) {
+                        int depth = 1 + (int) (2.0 * (1.0 - pondDist / (pond.r + 1)));
+                        int target = pond.level - depth;
+                        if (h > target) {
+                            h = target;
+                        }
+                        if (h < pond.level - 4) {
+                            h = pond.level - 4;
+                        }
+                    }
+                }
+
                 int stoneStart = minY + 1;
                 chunkData.setBlock(x, minY, z, Material.BEDROCK);
                 long bedHash = TerrainModel.hash2(seed ^ 0xBED0C4L, wx, wz);
@@ -144,14 +168,17 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                 }
 
                 double slope = (Math.abs(hg[x + 6][z + 3] - h0) + Math.abs(hg[x + 3][z + 6] - h0)) / 6.0;
+                // Fine slope over 2 blocks: grass colonizes by local flatness,
+                // not just the coarse 6-block slope.
+                double slopeFine = (Math.abs(hg[x + 4][z + 3] - h0)
+                        + Math.abs(hg[x + 3][z + 4] - h0)) / 2.0;
                 ForgeBiome biome = biomeProvider.pick(worldInfo, wx, wz, h0, slope);
                 TerrainModel.Region region = terrain.regionAt(wx, wz);
-                int lake = terrain.lakeLevelAt(wx, wz);
                 double moist = terrain.moistureAt(wx, wz);
                 double temp = terrain.temperatureAt(wx, wz, h);
 
-                Material surface = surfaceBlock(terrain, biome, region, slope, h, sea, moist,
-                        temp, wx, wz, volcanoDist, lake);
+                Material surface = surfaceBlock(terrain, biome, region, slope, slopeFine, h, sea,
+                        moist, temp, wx, wz, volcanoDist);
                 if (inCrater || inRim) {
                     surface = Material.BASALT; // crater floor, walls and rim ring
                 }
@@ -160,9 +187,10 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                 if (h < sea) {
                     chunkData.setRegion(x, h + 1, z, x + 1, sea + 1, z + 1, Material.WATER);
                 }
-                // Alpine lakes: valley basins above the waterline pool up.
-                if (lake > 0 && h < lake && h > sea) {
-                    chunkData.setRegion(x, h + 1, z, x + 1, lake + 1, z + 1, Material.WATER);
+                // Pond water: pooled flat at the pond level, depth <= 4.
+                if (pond != null && pondDist >= 0.0 && pondDist <= pond.r + 1
+                        && h < pond.level && h > sea && h + 1 < pond.level + 1) {
+                    chunkData.setRegion(x, h + 1, z, x + 1, pond.level + 1, z + 1, Material.WATER);
                 }
 
                 // Lava lake pooled flat inside the crater bowl.
@@ -202,19 +230,125 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                     }
                 }
 
-                // Granite valley waterfalls: water chutes cut into sheer faces.
+                // Sulfur ponds: small acidic pools staining volcanic rock
+                // yellow, plus the geyser basin. Yellow rims, shallow hearts.
+                // Same border-safe pattern as the geyser pools.
+                if ((biome == ForgeBiome.ASHEN_CALDERA || biome == ForgeBiome.BRIMSTONE_FLATS
+                            || biome == ForgeBiome.GEYSER_BASIN)
+                        && h > sea + 1 && h + 4 < maxY && x >= 1 && x <= 14 && z >= 1 && z <= 14) {
+                    double sroll = terrain.columnRandom(wx, wz, 0x51F02L);
+                    if (sroll < 0.022) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            for (int dz = -1; dz <= 1; dz++) {
+                                if (hg[x + 3 + dx][z + 3 + dz] != h0) {
+                                    continue;
+                                }
+                                if (dx == 0 && dz == 0) {
+                                    chunkData.setBlock(x, h - 1, z, Material.WATER);
+                                    chunkData.setBlock(x, h, z, Material.AIR);
+                                } else {
+                                    long sh = TerrainModel.hash2(seed ^ 0x51F03L, wx + dx, wz + dz);
+                                    chunkData.setBlock(x + dx, h, z + dz,
+                                            (sh & 1) == 0 ? Material.YELLOW_TERRACOTTA
+                                                    : Material.SANDSTONE);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Waterfalls: thin segmented chutes at genuine cliff lips —
+                // never curtains. Only where the ground truly falls away
+                // beside the column, so the water reads as falling instead
+                // of a blue wall embedded in rock.
                 if (region == TerrainModel.Region.NONE
                         && terrain.graniteMaskAt(wx, wz) > 0.45 && slope > 1.15 && h > sea + 10
-                        && (TerrainModel.hash2(seed ^ 0x9A7E2FAL, wx, wz) & 15) == 0) {
-                    for (int i = 0; i <= 8 && h - i > minY + 1; i++) {
-                        chunkData.setBlock(x, h - i, z, Material.WATER);
+                        && (TerrainModel.hash2(seed ^ 0x9A7E2FL, wx, wz) & 63) == 0) {
+                    int lip = h0 - Math.min(Math.min(hg[x + 2][z + 3], hg[x + 4][z + 3]),
+                            Math.min(hg[x + 3][z + 2], hg[x + 3][z + 4]));
+                    if (lip >= 7) {
+                        for (int i = 0; i <= 6 && h - i > minY + 1; i++) {
+                            // Broken segments: dry gaps where the hash says so.
+                            if ((TerrainModel.hash2(seed ^ 0xFA11L, wx * 31 + i, wz * 17 - i) & 3)
+                                    != 0) {
+                                chunkData.setBlock(x, h - i, z, Material.WATER);
+                            }
+                        }
+                    }
+                }
+
+                // Wheat fields / crop lands: neat farmed rectangles in the
+                // plains. Border-agnostic: every column derives the same
+                // field from world coordinates, so fields cross chunk
+                // borders seamlessly.
+                TerrainModel.@Nullable Field field = null;
+                boolean inField = false;
+                if ((biome == ForgeBiome.ROLLING_PLAINS || biome == ForgeBiome.VERDANT_VALE
+                            || biome == ForgeBiome.GOLDEN_SAVANNA
+                            || biome == ForgeBiome.HIGH_PLAINS)
+                        && h > sea + 1 && h + 2 < maxY) {
+                    field = terrain.fieldAt(wx, wz);
+                    inField = field != null;
+                }
+                if (inField) {
+                    assert field != null;
+                    int lx = wx - field.cx;
+                    int lz = wz - field.cz;
+                    boolean ditch = ((lz + field.hd) % 5 == 4);
+                    if (ditch) {
+                        // Shallow irrigation channel; keeps the farmland wet.
+                        chunkData.setBlock(x, h, z, Material.WATER);
+                    } else {
+                        chunkData.setBlock(x, h, z, farms.farmland());
+                        long ch2 = TerrainModel.hash2(seed ^ 0xC2075L, wx, wz);
+                        BlockData crop = pickCrop(farms, field.crop, (ch2 & 7) < 6);
+                        if (h + 1 < maxY) {
+                            chunkData.setBlock(x, h + 1, z, crop);
+                        }
+                    }
+                    // Fence posts on the four corners, hay bale inside.
+                    if (!ditch && Math.abs(lx) == field.hw && Math.abs(lz) == field.hd
+                            && h + 1 < maxY) {
+                        chunkData.setBlock(x, h + 1, z, Material.OAK_FENCE);
+                    }
+                    if (!ditch) {
+                        long fhh = TerrainModel.hash2(seed ^ 0xBA75L, field.cx, field.cz);
+                        if ((fhh & 3) == 0) {
+                            int bx = field.cx + (int) ((fhh >>> 8) % (2 * field.hw + 1)) - field.hw;
+                            int bz = field.cz + (int) ((fhh >>> 16) % (2 * field.hd + 1)) - field.hd;
+                            if (wx == bx && wz == bz && h + 1 < maxY) {
+                                chunkData.setBlock(x, h + 1, z, Material.HAY_BLOCK);
+                            }
+                        }
+                    }
+                }
+
+                // Pond shores: a few wildflowers on the grass ring.
+                if (pond != null && pondDist > pond.r + 1 && pondDist <= pond.r + 4
+                        && surface == Material.GRASS_BLOCK && h + 1 < maxY) {
+                    long fh = TerrainModel.hash2(seed ^ 0xF10E2L, wx, wz);
+                    if ((fh & 7) == 0) {
+                        Material[] flowers = {Material.POPPY, Material.DANDELION,
+                                Material.CORNFLOWER, Material.ALLIUM, Material.OXEYE_DAISY,
+                                Material.LILY_OF_THE_VALLEY};
+                        chunkData.setBlock(x, h + 1, z, flowers[(int) ((fh >>> 16) % 6)]);
                     }
                 }
 
                 // Trees stay 2 blocks inside the border so they never cross chunks.
-                if (x >= 2 && x <= 13 && z >= 2 && z <= 13 && h >= sea && volcanoDist < 0.0) {
-                    trees.tryPlace(terrain, chunkData, x, h + 1, z, wx, wz, biome,
-                            snap.treeDensity(), sea);
+                // Lava country stays barren: no trees, flowers or grass where
+                // basalt and lava rule. Fields grow crops, not trees.
+                boolean barren = biome == ForgeBiome.ASHEN_CALDERA
+                        || biome == ForgeBiome.BRIMSTONE_FLATS
+                        || region == TerrainModel.Region.BARREN_WASTELAND
+                        || region == TerrainModel.Region.SULFUR_FLATS;
+                if (x >= 2 && x <= 13 && z >= 2 && z <= 13 && h >= sea && volcanoDist < 0.0
+                        && !barren && !inField) {
+                    double dens = snap.treeDensity();
+                    if (pond != null && pondDist <= pond.r + 5) {
+                        dens *= 1.6; // a few trees gather at the pond shore
+                    }
+                    trees.tryPlace(terrain, chunkData, x, h + 1, z, wx, wz, biome, dens, sea);
                 }
             }
         }
@@ -226,8 +360,8 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
      * slope AND altitude. Special territories paint their own palettes.
      */
     private static @NotNull Material surfaceBlock(TerrainModel terrain, ForgeBiome biome,
-            TerrainModel.Region region, double slope, int h, int sea, double moist, double temp,
-            int wx, int wz, double volcanoDist, int lake) {
+            TerrainModel.Region region, double slope, double slopeFine, int h, int sea,
+            double moist, double temp, int wx, int wz, double volcanoDist) {
         long seed = terrain.seed();
         if (volcanoDist >= 0.0 && volcanoDist < 110.0) {
             if (volcanoDist < 20.0) {
@@ -236,10 +370,6 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
             return (TerrainModel.hash2(seed ^ 0xBA5A17L, wx, wz) & 3) == 0
                     ? Material.BLACKSTONE : Material.BASALT;
         }
-        // Alpine lake shores: rocky, snowy when high.
-        if (lake > 0 && h <= lake + 1 && h >= lake - 2) {
-            return h > sea + 40 ? Material.SNOW_BLOCK : Material.GRAVEL;
-        }
         if (h < sea - 2) {
             // Seabed: sand near shore, gravel in the deep.
             return h > sea - 7 ? Material.SAND : Material.GRAVEL;
@@ -247,15 +377,17 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         if (h <= sea + 1) {
             return Material.SAND; // beach band
         }
-        // Snow line follows slope and altitude: steep faces shed snow.
+        // Snow line follows slope and altitude, but only above a hard
+        // elevation floor: alpine and lowland stay green/rocky below it.
+        int snowMin = terrain.snowMinElevation();
         int snowY = sea + 78 - (int) (slope * 55.0);
-        if (h > snowY && slope < 1.05) {
+        if (h > snowY && slope < 1.05 && h >= snowMin) {
             return Material.SNOW_BLOCK;
         }
-        if (temp < 0.30 && h > sea + 34 && slope < 0.9) {
+        if (temp < 0.30 && h > sea + 34 && slope < 0.9 && h >= snowMin) {
             return Material.SNOW_BLOCK;
         }
-        // Sheer cliffs: exposed rock.
+        // Bare rock stays on true cliffs and the steepest faces only.
         if (slope > 1.05) {
             return cliffRock(terrain, region, wx, wz, h);
         }
@@ -269,6 +401,9 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         if (region == TerrainModel.Region.DUNE_SEA) {
             return slope > 0.5 ? Material.SANDSTONE : Material.SAND; // slip faces
         }
+        if (biome == ForgeBiome.BRIMSTONE_FLATS) {
+            return sulfurCrust(terrain, wx, wz); // brimstone-stained flats
+        }
         if (region == TerrainModel.Region.GEYSER_BASIN) {
             Material mat = geyserMat(terrain, wx, wz);
             if (mat != null) {
@@ -279,8 +414,15 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         if (gm > 0.45 && slope > 0.7) {
             return graniteStrata(terrain, wx, wz, h); // pale Yosemite walls
         }
-        // Grass grows on gentle AND moderate slopes now (v1.2: more grass).
-        if (slope <= 0.85) {
+        // Grass colonizes by local flatness and pocket noise, not one global
+        // cutoff: hills read as grassy with rocky outcrops, only true cliffs
+        // and the steepest faces stay bare rock.
+        double grassLine = 0.55 + terrain.pocketAt(wx, wz) * 0.80;
+        double flat = Math.min(slope, slopeFine);
+        if (flat <= grassLine) {
+            if (biome == ForgeBiome.AMBERWOOD) {
+                return amberwoodFloor(terrain, wx, wz); // fallen-leaf mosaic
+            }
             if (biome.surface() == Material.GRASS_BLOCK) {
                 // Grass mosaic: dirt patches break up the carpet, plus the
                 // mottled speckle from the Growth refs.
@@ -384,6 +526,46 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
             return Material.RED_SAND;
         }
         return Material.GRAVEL;
+    }
+
+    /** Yellow brimstone-stained rock for the sulfur flats. */
+    private static @NotNull Material sulfurCrust(TerrainModel terrain, int wx, int wz) {
+        long m = (TerrainModel.hash2(terrain.seed() ^ 0x5B17C2L, wx, wz) >>> 8) & 15;
+        if (m < 6) {
+            return Material.YELLOW_TERRACOTTA;
+        }
+        if (m < 9) {
+            return Material.SANDSTONE;
+        }
+        if (m < 11) {
+            return Material.BASALT;
+        }
+        if (m < 13) {
+            return Material.ORANGE_TERRACOTTA;
+        }
+        return Material.GRAVEL;
+    }
+
+    /** Amberwood floor: fallen-leaf mosaic of orange, yellow and leaf litter. */
+    private static @NotNull Material amberwoodFloor(TerrainModel terrain, int wx, int wz) {
+        long patch = TerrainModel.hash2(terrain.seed() ^ 0xA97BE2L, wx >> 2, wz >> 2);
+        return switch ((int) ((patch >>> 8) & 7)) {
+            case 3, 4 -> Material.ORANGE_TERRACOTTA; // fallen leaves
+            case 5 -> Material.YELLOW_TERRACOTTA;
+            case 6 -> Material.COARSE_DIRT;
+            case 7 -> Material.DIRT;
+            default -> Material.GRASS_BLOCK;
+        };
+    }
+
+    /** Picks the mature or young crop template for a wheat-field column. */
+    private static @NotNull BlockData pickCrop(@NotNull FarmKit farms, int crop, boolean mature) {
+        return switch (crop) {
+            case 1 -> mature ? farms.carrotOld() : farms.carrotYoung();
+            case 2 -> mature ? farms.potatoOld() : farms.potatoYoung();
+            case 3 -> mature ? farms.beetOld() : farms.beetYoung();
+            default -> mature ? farms.wheatOld() : farms.wheatYoung();
+        };
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.forgeplugins.worldgen.gen;
 
 import com.forgeplugins.worldgen.noise.SimplexNoise;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The heart of ForgeWorldGen: turns world coordinates into terrain height,
@@ -17,8 +18,8 @@ public final class TerrainModel {
     private static final double VOLCANO_RADIUS = 96.0;
     /** Extra height added at the centre of a volcano cone. */
     private static final double VOLCANO_HEIGHT = 78.0;
-    /** Basin cell size for alpine lakes; one lake level per cell. */
-    private static final int LAKE_CELL = 64;
+    /** Pond cell size; at most one pond per cell. */
+    private static final int POND_CELL = 128;
     /** Granite dome cell size; at most one dome per cell. */
     private static final int DOME_CELL = 1024;
 
@@ -36,10 +37,13 @@ public final class TerrainModel {
         DUNE_SEA,
         /** Geothermal basin: hot springs and geyser cones (Yellowstone). */
         GEYSER_BASIN,
+        /** Yellow brimstone-stained volcanic flats (sulfur country). */
+        SULFUR_FLATS,
     }
 
     private final long seed;
     private final int seaLevel;
+    private final int snowMinElevation;
     private final double volcanoRarity;
     private final double mountainScale;
     private final double mountainRarity;
@@ -52,10 +56,11 @@ public final class TerrainModel {
     private final SimplexNoise cliff;
     private final SimplexNoise extra;
 
-    public TerrainModel(long seed, int seaLevel, double volcanoRarity, double mountainScale,
-                        double mountainRarity) {
+    public TerrainModel(long seed, int seaLevel, int snowMinElevation, double volcanoRarity,
+                        double mountainScale, double mountainRarity) {
         this.seed = seed;
         this.seaLevel = seaLevel;
+        this.snowMinElevation = snowMinElevation;
         this.volcanoRarity = volcanoRarity;
         this.mountainScale = mountainScale;
         this.mountainRarity = mountainRarity;
@@ -77,23 +82,49 @@ public final class TerrainModel {
     }
 
     /**
+     * Minimum elevation for snow cover and snowy biomes. Below this line the
+     * world stays green and rocky no matter how cold the climate noise gets.
+     */
+    public int snowMinElevation() {
+        return snowMinElevation;
+    }
+
+    /**
+     * Continental-scale heat 0..1: very-low-frequency temperature field that
+     * constrains biome layout so hot biomes never border frozen ones. Hot
+     * biomes only appear in warm zones, frozen biomes only in cold zones, and
+     * temperate biomes fill the wide gradient between them.
+     */
+    public double heatAt(int x, int z) {
+        return clamp01(0.5 + 0.5 * climate.fbm(x * 0.00003 + 11000.0, z * 0.00003 - 11000.0,
+                2, 2.0, 0.5));
+    }
+
+    /**
      * Special region for a world column. Rare territories carved out of the
-     * default terrain by low-frequency fields.
+     * default terrain by low-frequency fields. Hot regions are gated on the
+     * continental heat field so lava country never borders glaciers — the
+     * terrain and the biome pick both go through here, so they always agree.
      */
     public Region regionAt(int x, int z) {
+        double heat = heatAt(x, z);
         double a = region.fbm(x * 0.00007 + 3000.0, z * 0.00007 - 3000.0, 2, 2.0, 0.5);
-        if (a > 0.60) {
+        if (a > 0.60 && heat > 0.35) {
             return Region.PAINTED_CANYON;
         }
-        if (a < -0.60) {
+        if (a < -0.60 && heat > 0.30) {
             return Region.BARREN_WASTELAND;
         }
         double b = region.fbm(x * 0.00009 - 3000.0, z * 0.00009 + 3000.0, 2, 2.0, 0.5);
-        if (b > 0.64) {
+        if (b > 0.64 && heat > 0.45) {
             return Region.DUNE_SEA;
         }
-        if (b < -0.64) {
+        if (b < -0.64 && heat > 0.30) {
             return Region.GEYSER_BASIN;
+        }
+        double c = region.fbm(x * 0.00011 + 9000.0, z * 0.00011 - 9000.0, 2, 2.0, 0.5);
+        if (c > 0.62 && heat > 0.40) {
+            return Region.SULFUR_FLATS;
         }
         return Region.NONE;
     }
@@ -111,17 +142,183 @@ public final class TerrainModel {
     }
 
     /**
-     * Alpine lake level for the 64-block basin cell containing a column, or
-     * -1 when the cell holds no lake. Pure function of cell coordinates, so
-     * the level is identical on both sides of every chunk border.
+     * Small mountain pond near a world column, or null. Ponds are "nice
+     * little ponds in the mountains" by construction: one candidate per
+     * 128-block cell, radius 3-7 blocks, only where the centre sits in a
+     * mountain-valley dip above the sea. Pure function of coordinates, so
+     * shores line up across chunk borders.
      */
-    public int lakeLevelAt(int x, int z) {
-        long ch = hash2(seed ^ 0x1A4E5L, Math.floorDiv(x, LAKE_CELL), Math.floorDiv(z, LAKE_CELL));
-        double roll = (ch >>> 11) * 0x1p-53;
-        if (roll > 0.30) {
-            return -1;
+    public static final class Pond {
+        /** World X of the pond centre. */
+        public final int cx;
+        /** World Z of the pond centre. */
+        public final int cz;
+        /** Pond radius in blocks (3-7). */
+        public final int r;
+        /** Water surface Y (terrain height at the centre). */
+        public final int level;
+
+        Pond(int cx, int cz, int r, int level) {
+            this.cx = cx;
+            this.cz = cz;
+            this.r = r;
+            this.level = level;
         }
-        return seaLevel + 10 + (int) (((ch >>> 21) * 0x1p-43) * 34.0);
+    }
+
+    /**
+     * Finds the pond influencing a world column, or null. Scans the 3x3
+     * neighbourhood of pond cells; most columns reject on the cell hash
+     * alone, so the expensive height checks only run near real ponds.
+     */
+    public @Nullable Pond pondAt(int x, int z) {
+        int cellX = Math.floorDiv(x, POND_CELL);
+        int cellZ = Math.floorDiv(z, POND_CELL);
+        Pond best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                long ch = hash2(seed ^ 0x907D5L, cellX + dx, cellZ + dz);
+                double roll = (ch >>> 11) * 0x1p-53;
+                if (roll > 0.50) {
+                    continue;
+                }
+                int pcx = (cellX + dx) * POND_CELL + (int) (((ch >>> 21) * 0x1p-43) * POND_CELL);
+                int pcz = (cellZ + dz) * POND_CELL + (int) (((ch >>> 42) * 0x1p-22) * POND_CELL);
+                int r = 3 + (int) (((ch >>> 53) * 0x1p-11) * 5.0); // 3..7
+                double dist = Math.hypot(x - pcx, z - pcz);
+                if (dist > r + 4 || dist >= bestDist) {
+                    continue;
+                }
+                int hc = heightAt(pcx, pcz);
+                if (!pondEligible(pcx, pcz, hc, r)) {
+                    continue;
+                }
+                best = new Pond(pcx, pcz, r, hc);
+                bestDist = dist;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * A pond centre is eligible only in a genuine mountain-valley dip: hilly
+     * ground, above the sea, below the peaks, a local low point, and nowhere
+     * near a volcano.
+     */
+    private boolean pondEligible(int pcx, int pcz, int hc, int r) {
+        if (hc <= seaLevel + 10 || hc >= seaLevel + 150) {
+            return false;
+        }
+        if (mountainMaskAt(pcx, pcz) < 0.22) {
+            return false;
+        }
+        if (volcanoDistance(pcx, pcz) >= 0.0) {
+            return false;
+        }
+        int reach = r + 5;
+        int low = Math.min(Math.min(heightAt(pcx - reach, pcz), heightAt(pcx + reach, pcz)),
+                Math.min(heightAt(pcx, pcz - reach), heightAt(pcx, pcz + reach)));
+        return hc <= low + 2;
+    }
+
+    /** One candidate wheat field per 64-block cell. */
+    private static final int FIELD_CELL = 64;
+
+    /**
+     * A cultivated field: a neat farmed rectangle, border-agnostic. Every
+     * column derives the same field from world coordinates, so fields cross
+     * chunk borders seamlessly.
+     */
+    public static final class Field {
+        /** World X of the field centre. */
+        public final int cx;
+        /** World Z of the field centre. */
+        public final int cz;
+        /** Half-width in blocks (6-9). */
+        public final int hw;
+        /** Half-depth in blocks (5-8). */
+        public final int hd;
+        /** Crop: 0 wheat, 1 carrots, 2 potatoes, 3 beetroots. */
+        public final int crop;
+
+        Field(int cx, int cz, int hw, int hd, int crop) {
+            this.cx = cx;
+            this.cz = cz;
+            this.hw = hw;
+            this.hd = hd;
+            this.crop = crop;
+        }
+    }
+
+    /**
+     * Finds the field covering a world column, or null. One candidate per
+     * 64-block cell at 8% of cells, inset so the rectangle always fits
+     * inside its cell, and only on flat ground (corners within 3 of the
+     * centre height). The biome gate lives in the generator.
+     */
+    public @Nullable Field fieldAt(int x, int z) {
+        int cellX = Math.floorDiv(x, FIELD_CELL);
+        int cellZ = Math.floorDiv(z, FIELD_CELL);
+        long ch = hash2(seed ^ 0xFA291L, cellX, cellZ);
+        if ((ch >>> 11) * 0x1p-53 > 0.08) {
+            return null;
+        }
+        int hw = 6 + (int) (((ch >>> 21) * 0x1p-43) * 4.0); // 6..9
+        int hd = 5 + (int) (((ch >>> 32) * 0x1p-32) * 4.0); // 5..8
+        int cx = cellX * FIELD_CELL + hw + 2
+                + (int) (((ch >>> 43) * 0x1p-21) * (FIELD_CELL - 2 * hw - 4));
+        int cz = cellZ * FIELD_CELL + hd + 2
+                + (int) (((ch >>> 54) * 0x1p-10) * (FIELD_CELL - 2 * hd - 4));
+        int crop = (int) ((ch >>> 60) & 3);
+        if (Math.abs(x - cx) > hw || Math.abs(z - cz) > hd) {
+            return null;
+        }
+        int hc = heightAt(cx, cz);
+        if (Math.abs(heightAt(cx - hw, cz - hd) - hc) > 3) {
+            return null;
+        }
+        if (Math.abs(heightAt(cx + hw, cz - hd) - hc) > 3) {
+            return null;
+        }
+        if (Math.abs(heightAt(cx - hw, cz + hd) - hc) > 3) {
+            return null;
+        }
+        if (Math.abs(heightAt(cx + hw, cz + hd) - hc) > 3) {
+            return null;
+        }
+        return new Field(cx, cz, hw, hd, crop);
+    }
+
+    /**
+     * Mountain-range mask 0..1 at a world column, extracted from
+     * {@link #heightAt} so pond placement and terrain agree on what counts
+     * as mountains.
+     */
+    public double mountainMaskAt(int x, int z) {
+        double threshold = 0.05 + (1.0 - mountainRarity) * 0.45;
+        double maskField = mountains.fbm(x * 0.00011 + 100.0, z * 0.00011 - 100.0, 3, 2.0, 0.5);
+        return smoothstep(threshold, threshold + 0.4, maskField);
+    }
+
+    /**
+     * Smooth low-frequency pocket field 0..1 (8-block cells, bilinearly
+     * interpolated) that modulates grass colonization: grass creeps into the
+     * gentler pockets of stone hills instead of obeying one global cutoff.
+     * Pure function of coordinates — chunk-border safe.
+     */
+    public double pocketAt(int x, int z) {
+        int cx = Math.floorDiv(x, 8);
+        int cz = Math.floorDiv(z, 8);
+        double fx = (x - cx * 8) / 8.0;
+        double fz = (z - cz * 8) / 8.0;
+        double ux = fx * fx * (3.0 - 2.0 * fx);
+        double uz = fz * fz * (3.0 - 2.0 * fz);
+        double a = columnRandom(cx, cz, 0x90C4E7L);
+        double b = columnRandom(cx + 1, cz, 0x90C4E7L);
+        double c = columnRandom(cx, cz + 1, 0x90C4E7L);
+        double d = columnRandom(cx + 1, cz + 1, 0x90C4E7L);
+        return (a * (1.0 - ux) + b * ux) * (1.0 - uz) + (c * (1.0 - ux) + d * ux) * uz;
     }
 
     /**
@@ -158,8 +355,8 @@ public final class TerrainModel {
     /**
      * Terrain height (top solid block Y) for a world column. Combines a
      * continental base, masked rounded-craggy mountains, escarpment cliffs,
-     * rolling hills, river gorges, alpine lake basins, region territories and
-     * volcano cones. Result is clamped to sane world bounds by the caller.
+     * rolling hills, river gorges, region territories and volcano cones.
+     * Result is clamped to sane world bounds by the caller.
      */
     public int heightAt(int x, int z) {
         double cont = continent.fbm(x * 0.00055, z * 0.00055, 4, 2.02, 0.5);
@@ -172,9 +369,7 @@ public final class TerrainModel {
         // distribution). Higher rarity lowers the mask threshold toward the
         // old always-mountainous behaviour; the default keeps most land
         // mellow and reserves high relief for occasional ranges.
-        double threshold = 0.05 + (1.0 - mountainRarity) * 0.45;
-        double maskField = mountains.fbm(x * 0.00011 + 100.0, z * 0.00011 - 100.0, 3, 2.0, 0.5);
-        double mask = smoothstep(threshold, threshold + 0.4, maskField);
+        double mask = mountainMaskAt(x, z);
 
         double mountainH = 0.0;
         if (mask > 0.001) {
@@ -192,9 +387,11 @@ public final class TerrainModel {
 
         // Escarpment cliffs: a low-frequency terrace field lifts plateaus at
         // mountain fronts and high-plains edges, so the lift boundary reads
-        // as a sheer rock face with talus at its base.
+        // as a sheer rock face with talus at its base. The two masks merge
+        // with a smooth OR so no crease line forms where they meet.
         double cliffN = cliff.fbm(x * 0.00033 + 200.0, z * 0.00033 - 200.0, 2, 2.0, 0.5);
-        double cliffH = smoothstep(0.02, 0.22, cliffN) * Math.max(mask, highPlains) * 44.0;
+        double liftMask = mask + highPlains - mask * highPlains;
+        double cliffH = smoothstep(0.02, 0.22, cliffN) * liftMask * 44.0;
 
         double h = base + mountainH + hills + cliffH + highPlains * 26.0;
 
@@ -208,15 +405,29 @@ public final class TerrainModel {
             h = base + Math.pow(dune, 1.7) * 9.0 + hills * 0.3;
         } else if (region == Region.PAINTED_CANYON) {
             // Mesas: quantised terraces so the height steps themselves form
-            // cliffs, painted by the strata surfacing.
-            double step = 12.0;
-            double q = Math.round((h - seaLevel) / step);
-            h = seaLevel + q * step + detail.fbm(x * 0.01, z * 0.01, 1, 2.0, 0.5) * 1.5;
+            // cliffs, painted by the strata surfacing. The quantisation
+            // domain is warped by low-frequency noise so terrace edges wiggle
+            // instead of running straight, and each step bevels across a
+            // transition band instead of snapping — no staircases, no sharp
+            // 90-degree corners. Step height breathes slowly per territory.
+            double step = 12.0 + extra.fbm(x * 0.0004 - 7.0, z * 0.0004 + 7.0, 2, 2.0, 0.5) * 2.5;
+            double warp = extra.fbm(x * 0.0016 + 31.0, z * 0.0016 - 31.0, 2, 2.0, 0.5) * 7.0;
+            double t = (h - seaLevel + warp) / step;
+            double qi = Math.floor(t);
+            double f = t - qi;
+            double s = smoothstep(0.30, 0.70, f);
+            h = seaLevel + (qi + s) * step + detail.fbm(x * 0.01, z * 0.01, 1, 2.0, 0.5) * 2.5;
         } else if (region == Region.BARREN_WASTELAND) {
             // Shallow dips that become lava pools in the surfacing pass.
             double dip = smoothstep(0.35, 0.75,
                     extra.fbm(x * 0.0021 + 400.0, z * 0.0021 - 400.0, 2, 2.0, 0.5)) * 9.0;
             h -= dip;
+        } else if (region == Region.SULFUR_FLATS) {
+            // Flat volcanic plain pocked with shallow sulfur pits.
+            h = base + hills * 0.35;
+            double pit = smoothstep(0.45, 0.75,
+                    extra.fbm(x * 0.003 + 900.0, z * 0.003 - 900.0, 2, 2.0, 0.5)) * 4.0;
+            h -= pit;
         }
         if (gm > 0.001) {
             // Granite valley (Yosemite): a half-dome rising beside a wide
@@ -234,19 +445,6 @@ public final class TerrainModel {
         double carveT = 1.0 - smoothstep(0.008, 0.06, riverBand); // 1 at the gorge centreline
         double valley = 1.0 - smoothstep(6.0, 42.0, Math.abs(base - seaLevel));
         h -= carveT * carveT * 22.0 * valley * (1.0 + gm * 0.6);
-
-        // Alpine lakes: where the basin field dips a mountain valley below
-        // the cell's lake level, the valley pools into a lake instead of
-        // draining. The level is per-cell, so shores line up across chunks.
-        int lake = lakeLevelAt(x, z);
-        if (lake > 0) {
-            double basin = detail.fbm(x * 0.0011 + 700.0, z * 0.0011 - 700.0, 2, 2.0, 0.5);
-            double basinM = smoothstep(0.2, 0.55, basin);
-            if (basinM > 0.0 && h > seaLevel + 4 && h < lake + 6) {
-                double target = lake - 3.0 - basinM * 3.0;
-                h += (target - h) * basinM;
-            }
-        }
 
         h += volcanoCone(x, z);
 

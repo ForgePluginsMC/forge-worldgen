@@ -20,12 +20,14 @@ public final class TreePlacer {
     private final BlockData oakLeaves;
     private final BlockData spruceLeaves;
     private final BlockData acaciaLeaves;
+    private final BlockData jungleLeaves;
 
     public TreePlacer(@Nullable BlockData oakLeaves, @Nullable BlockData spruceLeaves,
-                      @Nullable BlockData acaciaLeaves) {
+                      @Nullable BlockData acaciaLeaves, @Nullable BlockData jungleLeaves) {
         this.oakLeaves = oakLeaves;
         this.spruceLeaves = spruceLeaves;
         this.acaciaLeaves = acaciaLeaves;
+        this.jungleLeaves = jungleLeaves;
     }
 
     /**
@@ -169,10 +171,10 @@ public final class TreePlacer {
             return;
         }
         if (flora < 0.018) {
-            // Low bush: a couple of leaf blocks.
-            setLeaves(data, x, y, z, null, Material.OAK_LEAVES);
+            // Low bush: a couple of leaf blocks, persistent so they never rot.
+            setLeaves(data, x, y, z, oakLeaves, Material.OAK_LEAVES);
             if (((wx * 31 + wz) & 1) == 0) {
-                setLeaves(data, x, y + 1, z, null, Material.OAK_LEAVES);
+                setLeaves(data, x, y + 1, z, oakLeaves, Material.OAK_LEAVES);
             }
             return;
         }
@@ -260,7 +262,7 @@ public final class TreePlacer {
                     if (Math.abs(dx) == r && Math.abs(dz) == r && ((dx + dz + dy) & 1) == 0) {
                         continue;
                     }
-                    setLeaves(data, x + dx, top + dy, z + dz, null, Material.JUNGLE_LEAVES);
+                    setLeaves(data, x + dx, top + dy, z + dz, jungleLeaves, Material.JUNGLE_LEAVES);
                 }
             }
         }
@@ -273,7 +275,11 @@ public final class TreePlacer {
                 if (data.getType(sx, top - 3 - i, sz) != Material.AIR) {
                     break;
                 }
-                data.setBlock(sx, top - 3 - i, sz, Material.JUNGLE_LEAVES);
+                if (jungleLeaves != null) {
+                    data.setBlock(sx, top - 3 - i, sz, jungleLeaves);
+                } else {
+                    data.setBlock(sx, top - 3 - i, sz, Material.JUNGLE_LEAVES);
+                }
             }
         }
     }
@@ -354,7 +360,9 @@ public final class TreePlacer {
     /** Palm: curving trunk with radiating fronds, roots at the waterline. */
     private void placePalm(ChunkGenerator.@NotNull ChunkData data, int x, int y, int z,
                            int maxY, long hj) {
-        int trunk = 5 + (int) ((hj >>> 48) % 3); // 5-7
+        // Trunk 7-9: keeps every frond within leaf-decay range of a log,
+        // and fronds are persistent anyway as belt-and-braces.
+        int trunk = 7 + (int) ((hj >>> 48) % 3); // 7-9
         int lx = (int) ((hj >>> 52) % 3) - 1;
         int lz = (int) ((hj >>> 56) % 3) - 1;
         if (lx == 0 && lz == 0) {
@@ -376,10 +384,10 @@ public final class TreePlacer {
         int top = y + trunk;
         int[][] fronds = {{2, 0}, {-2, 0}, {0, 2}, {0, -2}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
         for (int[] f : fronds) {
-            setLeaves(data, tx + f[0], top + 1, tz + f[1], null, Material.JUNGLE_LEAVES);
+            setLeaves(data, tx + f[0], top + 1, tz + f[1], jungleLeaves, Material.JUNGLE_LEAVES);
         }
-        setLeaves(data, tx, top + 1, tz, null, Material.JUNGLE_LEAVES);
-        setLeaves(data, tx, top + 2, tz, null, Material.JUNGLE_LEAVES);
+        setLeaves(data, tx, top + 1, tz, jungleLeaves, Material.JUNGLE_LEAVES);
+        setLeaves(data, tx, top + 2, tz, jungleLeaves, Material.JUNGLE_LEAVES);
     }
 
     /** Ancient mega-tree: 2x2 trunk, towering canopy, a true landmark. */

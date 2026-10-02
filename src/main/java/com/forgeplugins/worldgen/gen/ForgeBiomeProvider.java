@@ -16,7 +16,7 @@ public final class ForgeBiomeProvider extends BiomeProvider {
     private static final List<Biome> ALL = List.of(
             Biome.WINDSWEPT_HILLS,
             Biome.FROZEN_PEAKS,
-            Biome.MEADOW,
+            Biome.BIRCH_FOREST,
             Biome.DARK_FOREST,
             Biome.OLD_GROWTH_PINE_TAIGA,
             Biome.SAVANNA,
@@ -79,6 +79,9 @@ public final class ForgeBiomeProvider extends BiomeProvider {
         if (region == TerrainModel.Region.GEYSER_BASIN) {
             return ForgeBiome.GEYSER_BASIN;
         }
+        if (region == TerrainModel.Region.SULFUR_FLATS) {
+            return ForgeBiome.BRIMSTONE_FLATS;
+        }
         if (terrain.graniteMaskAt(x, z) > 0.45) {
             return ForgeBiome.GRANITE_VALLEY;
         }
@@ -95,8 +98,10 @@ public final class ForgeBiomeProvider extends BiomeProvider {
         if (height < sea - 1) {
             return ForgeBiome.TIDEWATER_SHALLOWS; // shallow sea
         }
-        if (height >= sea + 92) {
-            return ForgeBiome.FROSTCAP_PEAKS;
+        if (height >= sea + 92 && height >= terrain.snowMinElevation()) {
+            // Snow country lives above the snow line and in cold zones; high
+            // peaks in hot zones stay bare rock instead.
+            return terrain.heatAt(x, z) > 0.65 ? ForgeBiome.EMBER_HIGHLANDS : ForgeBiome.FROSTCAP_PEAKS;
         }
 
         // Slope from finite differences; steep high ground becomes highlands.
@@ -106,21 +111,27 @@ public final class ForgeBiomeProvider extends BiomeProvider {
 
         double temp = terrain.temperatureAt(x, z, height);
         double moist = terrain.moistureAt(x, z);
+        double heat = terrain.heatAt(x, z);
 
         if (temp > 0.74 && moist < 0.34) {
-            return ForgeBiome.SUNBAKED_DUNES;
+            return heat < 0.30 ? ForgeBiome.ROLLING_PLAINS : ForgeBiome.SUNBAKED_DUNES;
         }
         if (temp > 0.66 && moist < 0.45) {
-            return ForgeBiome.GOLDEN_SAVANNA;
+            return heat < 0.30 ? ForgeBiome.ROLLING_PLAINS : ForgeBiome.GOLDEN_SAVANNA;
         }
         if (temp < 0.44) {
-            return moist > 0.48 ? ForgeBiome.WHISPERING_PINES : ForgeBiome.EMBER_HIGHLANDS;
+            return moist > 0.48 && heat <= 0.60 ? ForgeBiome.WHISPERING_PINES : ForgeBiome.EMBER_HIGHLANDS;
+        }
+        // Amberwood: crisp autumn forest in the temperate band.
+        if (heat >= 0.35 && heat <= 0.65 && temp > 0.52 && temp < 0.78
+                && moist > 0.52 && moist < 0.74) {
+            return ForgeBiome.AMBERWOOD;
         }
         if (moist > 0.66) {
             return temp < 0.72 && moist > 0.78 ? ForgeBiome.BLOOMING_MEADOW : ForgeBiome.MISTWOOD;
         }
         if (moist < 0.32) {
-            return ForgeBiome.GOLDEN_SAVANNA;
+            return heat < 0.30 ? ForgeBiome.ROLLING_PLAINS : ForgeBiome.GOLDEN_SAVANNA;
         }
         if (moist > 0.55) {
             return ForgeBiome.VERDANT_VALE;
