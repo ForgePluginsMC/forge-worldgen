@@ -1,0 +1,18 @@
+name: ForgeWorldGen
+version: '1.0.0'
+main: com.forgeplugins.worldgen.ForgeWorldGen
+api-version: '26.3'
+author: Forge
+description: Blazing-fast custom terrain generation — epic mountains, volcanoes, 10 original biomes and custom flora.
+commands:
+  fgen:
+    description: Manage ForgeWorldGen worlds and pre-generation
+    usage: /fgen <create|tp|pregen|cancel|reload>
+    permission: fgen.tp
+permissions:
+  fgen.admin:
+    description: Create worlds, pre-generate, cancel and reload ForgeWorldGen
+    default: op
+  fgen.tp:
+    description: Teleport to ForgeWorldGen worlds
+    default: op

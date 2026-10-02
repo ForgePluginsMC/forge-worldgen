@@ -1,0 +1,36 @@
+# ============================================================
+# ForgeWorldGen configuration
+# ============================================================
+
+generation:
+  # Ocean level. Terrain below this fills with water.
+  sea-level: 62
+  # Chance per 512x512-block cell to spawn a volcano (0.0 disables).
+  # 0.1 ~= one volcano per ~10k chunks.
+  volcano-rarity: 0.1
+  # Multiplier on tree/flora density (0.0 disables trees).
+  tree-density: 1.0
+  # Multiplier on mountain height (1.0 = designed height).
+  mountain-scale: 1.0
+
+features:
+  # Vanilla cave carvers running on ForgeWorldGen terrain.
+  caves: true
+  # Vanilla decorations (ores, flowers, etc.) on ForgeWorldGen terrain.
+  decorations: true
+  # Vanilla structures (villages, etc.) on ForgeWorldGen terrain.
+  structures: true
+  # Mob spawning.
+  mobs: true
+
+world:
+  # Re-attach the ForgeWorldGen generator to managed worlds on startup,
+  # so restarts never silently fall back to vanilla generation at borders.
+  auto-manage: true
+
+# Worlds created by /fgen create. Do not edit by hand unless you know
+# what you are doing — the plugin maintains this list.
+managed-worlds: []
+
+messages:
+  prefix: "<gold>[ForgeWorldGen]</gold> "
