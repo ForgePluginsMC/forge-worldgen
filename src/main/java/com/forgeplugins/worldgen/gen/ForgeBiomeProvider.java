@@ -8,8 +8,8 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * Climate-driven biome provider. Biomes are chosen from continuous
- * temperature/moisture/altitude fields, so borders follow smooth contour
- * lines instead of hard chunk-aligned edges.
+ * temperature/moisture/altitude fields plus large-scale region territories,
+ * so borders follow smooth contour lines instead of hard chunk-aligned edges.
  */
 public final class ForgeBiomeProvider extends BiomeProvider {
 
@@ -22,8 +22,12 @@ public final class ForgeBiomeProvider extends BiomeProvider {
             Biome.SAVANNA,
             Biome.DESERT,
             Biome.FLOWER_FOREST,
-            Biome.OCEAN,
-            Biome.STONY_PEAKS);
+            Biome.BEACH,
+            Biome.STONY_PEAKS,
+            Biome.PLAINS,
+            Biome.SAVANNA_PLATEAU,
+            Biome.DEEP_OCEAN,
+            Biome.BADLANDS);
 
     private final TerrainModel terrain;
 
@@ -42,6 +46,18 @@ public final class ForgeBiomeProvider extends BiomeProvider {
      */
     public @NotNull ForgeBiome pick(@NotNull WorldInfo worldInfo, int x, int z) {
         int height = terrain.heightAt(x, z);
+        int hx = terrain.heightAt(x + 3, z);
+        int hz = terrain.heightAt(x, z + 3);
+        double slope = (Math.abs(hx - height) + Math.abs(hz - height)) / 6.0;
+        return pick(worldInfo, x, z, height, slope);
+    }
+
+    /**
+     * Biome pick with precomputed height and slope, so the chunk generator
+     * can reuse the values it already measured instead of re-sampling.
+     */
+    public @NotNull ForgeBiome pick(@NotNull WorldInfo worldInfo, int x, int z,
+                                    int height, double slope) {
         int sea = terrain.seaLevel();
 
         double volcanoDist = terrain.volcanoDistance(x, z);
@@ -49,17 +65,41 @@ public final class ForgeBiomeProvider extends BiomeProvider {
             return ForgeBiome.ASHEN_CALDERA;
         }
 
-        if (height < sea - 2) {
-            return ForgeBiome.TIDEWATER_SHALLOWS;
+        // Special territories first: they override climate.
+        TerrainModel.Region region = terrain.regionAt(x, z);
+        if (region == TerrainModel.Region.PAINTED_CANYON) {
+            return ForgeBiome.PAINTED_CANYON;
+        }
+        if (region == TerrainModel.Region.BARREN_WASTELAND) {
+            return ForgeBiome.BARREN_WASTELAND;
+        }
+        if (region == TerrainModel.Region.DUNE_SEA) {
+            return ForgeBiome.DUNE_SEA;
+        }
+        if (region == TerrainModel.Region.GEYSER_BASIN) {
+            return ForgeBiome.GEYSER_BASIN;
+        }
+        if (terrain.graniteMaskAt(x, z) > 0.45) {
+            return ForgeBiome.GRANITE_VALLEY;
+        }
+        if (terrain.highPlainsMaskAt(x, z) > 0.5 && height > sea + 8) {
+            return ForgeBiome.HIGH_PLAINS;
+        }
+
+        if (height < sea - 12) {
+            return ForgeBiome.DEEP_OCEAN;
+        }
+        if (height >= sea - 1 && height <= sea + 1) {
+            return ForgeBiome.TIDEWATER_SHALLOWS; // beach band, palms at the waterline
+        }
+        if (height < sea - 1) {
+            return ForgeBiome.TIDEWATER_SHALLOWS; // shallow sea
         }
         if (height >= sea + 92) {
             return ForgeBiome.FROSTCAP_PEAKS;
         }
 
         // Slope from finite differences; steep high ground becomes highlands.
-        int hx = terrain.heightAt(x + 3, z);
-        int hz = terrain.heightAt(x, z + 3);
-        double slope = (Math.abs(hx - height) + Math.abs(hz - height)) / 6.0;
         if (slope > 0.85 && height > sea + 18) {
             return ForgeBiome.EMBER_HIGHLANDS;
         }
@@ -82,7 +122,10 @@ public final class ForgeBiomeProvider extends BiomeProvider {
         if (moist < 0.32) {
             return ForgeBiome.GOLDEN_SAVANNA;
         }
-        return ForgeBiome.VERDANT_VALE;
+        if (moist > 0.55) {
+            return ForgeBiome.VERDANT_VALE;
+        }
+        return ForgeBiome.ROLLING_PLAINS;
     }
 
     @Override

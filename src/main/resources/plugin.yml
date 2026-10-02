@@ -1,9 +1,9 @@
 name: ForgeWorldGen
-version: '1.0.1'
+version: '1.2.0'
 main: com.forgeplugins.worldgen.ForgeWorldGen
 api-version: '26.3'
 author: Forge
-description: Blazing-fast custom terrain generation — epic mountains, volcanoes, 10 original biomes and custom flora.
+description: Blazing-fast custom terrain generation — rounded-craggy ranges, cliffs, 18 original biomes, alpine lakes, custom trees and boulders.
 commands:
   fgen:
     description: Manage ForgeWorldGen worlds and pre-generation
