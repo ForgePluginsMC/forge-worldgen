@@ -1,29 +1,22 @@
 # ============================================================
-# ForgeWorldGen configuration
+# ForgeWorldGen v2 configuration — back to basics.
+# One change over vanilla: gentle terrain smoothing.
+# Everything else (biomes, trees, caves, structures) is vanilla.
 # ============================================================
 
 generation:
   # Ocean level. Terrain below this fills with water.
   sea-level: 62
-  # Snow line: snowy biomes and snow cover only appear at or above this Y.
-  # Below it, alpine and lowland areas stay green/rocky.
-  snow-min-elevation: 100
-  # Chance per 512x512-block cell to spawn a volcano (0.0 disables).
-  # 0.1 ~= one volcano per ~10k chunks.
-  volcano-rarity: 0.1
-  # Multiplier on tree/flora density (0.0 disables trees).
-  tree-density: 1.0
-  # Multiplier on mountain height (1.0 = designed height).
-  mountain-scale: 1.0
-  # Mountain range rarity 0.0-1.0: how much land becomes dramatic ranges.
-  # 1.0 = mountains almost everywhere, 0.5 (default) = Earth-like:
-  # mellow rolling land with rare regional ranges.
-  mountain-rarity: 0.5
+
+terrain:
+  # Gentle low-pass smoothing on the heightfield, 0.0 (off) to 1.0.
+  # 0.35 is the subtle default: softens jagged edges, keeps character.
+  smoothing: 0.35
 
 features:
   # Vanilla cave carvers running on ForgeWorldGen terrain.
   caves: true
-  # Vanilla decorations (ores, flowers, etc.) on ForgeWorldGen terrain.
+  # Vanilla decorations (ores, trees, flowers, etc.) on ForgeWorldGen terrain.
   decorations: true
   # Vanilla structures (villages, etc.) on ForgeWorldGen terrain.
   structures: true

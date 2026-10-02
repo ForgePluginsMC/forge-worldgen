@@ -5,14 +5,12 @@ import org.jetbrains.annotations.NotNull;
 
 /**
  * Immutable snapshot of the generation settings in config.yml.
+ * Deliberately minimal: v2 changes one thing (smoothing) and leaves the
+ * rest to vanilla.
  */
 public record GenSettings(
         int seaLevel,
-        int snowMinElevation,
-        double volcanoRarity,
-        double treeDensity,
-        double mountainScale,
-        double mountainRarity,
+        double smoothing,
         boolean caves,
         boolean decorations,
         boolean structures,
@@ -21,11 +19,7 @@ public record GenSettings(
     public static @NotNull GenSettings fromConfig(@NotNull FileConfiguration config) {
         return new GenSettings(
                 config.getInt("generation.sea-level", 62),
-                config.getInt("generation.snow-min-elevation", 100),
-                config.getDouble("generation.volcano-rarity", 0.1),
-                config.getDouble("generation.tree-density", 1.0),
-                config.getDouble("generation.mountain-scale", 1.0),
-                Math.clamp(config.getDouble("generation.mountain-rarity", 0.5), 0.0, 1.0),
+                Math.clamp(config.getDouble("terrain.smoothing", 0.35), 0.0, 1.0),
                 config.getBoolean("features.caves", true),
                 config.getBoolean("features.decorations", true),
                 config.getBoolean("features.structures", true),

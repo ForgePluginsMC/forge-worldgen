@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.forgeplugins"
-version = "1.2.2"
+version = "2.0.0"
 
 repositories {
     mavenCentral()
