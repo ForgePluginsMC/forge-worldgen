@@ -81,6 +81,8 @@ messages:
 
 > **Note:** worlds created with `/fgen create` are recorded under `managed-worlds`. On server restart Bukkit auto-loads world folders but forgets custom generators — with `auto-manage` on, ForgeWorldGen unloads and reloads those worlds with its generator attached, so you never get vanilla chunks at the borders.
 
+> **Known limitation (Paper 26.3 alpha):** worlds created at runtime via `/fgen create` currently live in memory — Paper 26.3's alpha build does not write their folders to disk on `save()`/`save-all` (the Doortals pocket world behaves the same way on this build). They work fully while the server runs; expect them to need re-creation after a restart until Paper's world persistence catches up.
+
 ## Building
 
 Requirements: JDK 25, Gradle 9.7.1.
