@@ -139,10 +139,18 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
     // them: bedrock is placed inside generateNoise's single pass, and the
     // generator is stateless/thread-safe regardless of the old parallel hint.
     //
-    // We also do not override getDefaultBiomeProvider (vanilla biomes apply)
-    // and we leave shouldGenerateSurface() at its default true, so the
-    // vanilla surface step paints our stone. Caves, decorations, structures
-    // and mobs run through the vanilla pipeline, toggled by config.
+    // shouldGenerateSurface() defaults to FALSE in Paper 26.3 (verified via
+    // javap on the API jar) — we must explicitly return true or the vanilla
+    // surface step never runs and the world stays bare stone.
+    //
+    // We do not override getDefaultBiomeProvider (vanilla biomes apply).
+    // Caves, decorations, structures and mobs run through the vanilla
+    // pipeline, toggled by config.
+    @Override
+    public boolean shouldGenerateSurface() {
+        return true;
+    }
+
     @Override
     public boolean shouldGenerateNoise() {
         return true;
