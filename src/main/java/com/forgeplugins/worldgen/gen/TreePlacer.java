@@ -7,12 +7,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Deterministic flora placement. Trees are original low-block-count designs
- * placed during the noise pass with a per-column seeded hash, so they are
- * stable across restarts and cost no extra chunk passes.
- *
- * <p>Trunks stay at least two blocks from the chunk border so no tree ever
- * writes outside its own chunk.
+ * Deterministic flora placement. Trees use a hash-driven poisson-ish
+ * scatter — grove clumping plus local-minimum thinning — so forests read as
+ * natural woodland, never rows, columns or a lattice. Trunks stay far enough
+ * inside the chunk border (per their canopy radius) that no tree ever writes
+ * outside its own chunk, and everything is a pure function of world
+ * coordinates, so placement is stable across restarts and chunk borders.
  */
 public final class TreePlacer {
 
@@ -35,11 +35,11 @@ public final class TreePlacer {
                          int x, int y, int z, int worldX, int worldZ,
                          @NotNull ForgeBiome biome, double densityMultiplier) {
         ForgeBiome.TreeType type = biome.trees();
-        double chance = biome.treeChance() * densityMultiplier;
-        double roll = terrain.columnRandom(worldX, worldZ, 0x7EE05L);
         int maxY = data.getMaxHeight();
 
         if (type == ForgeBiome.TreeType.CACTUS) {
+            double roll = terrain.columnRandom(worldX, worldZ, 0x7EE05L);
+            double chance = biome.treeChance() * densityMultiplier;
             if (roll < chance && y + 3 < maxY) {
                 int h = 2 + (int) (roll * 997.0 % 2);
                 for (int i = 0; i < h; i++) {
@@ -51,7 +51,9 @@ public final class TreePlacer {
             return;
         }
 
-        if (type == ForgeBiome.TreeType.NONE || roll >= chance) {
+        double roll = terrain.columnRandom(worldX, worldZ, 0x7EE05L);
+        if (type == ForgeBiome.TreeType.NONE
+                || !acceptTree(terrain, worldX, worldZ, biome, densityMultiplier, roll)) {
             // Ground flora: occasional grass tufts / flowers on grass biomes.
             double flora = terrain.columnRandom(worldX, worldZ, 0xF10AAAL);
             if (biome.surface() == Material.GRASS_BLOCK && flora < 0.06 && y < maxY) {
@@ -60,17 +62,71 @@ public final class TreePlacer {
             return;
         }
 
+        // Scatter the trunk off the column grid with a hash jitter, bury the
+        // base two blocks so trees never float on slopes, and vary the
+        // canopy: one in four trees grows a grander "elder" crown.
+        long hj = TerrainModel.hash2(terrain.seed() ^ 0xE1DE2L, worldX, worldZ);
+        int canopyR = switch (type) {
+            case OAK -> 2;
+            case PINE -> 3;
+            case ACACIA -> 2;
+            default -> 2;
+        };
+        boolean elder = (hj & 3) == 0;
+        if (elder) {
+            canopyR += 1;
+        }
+        int jx = (int) ((hj >>> 32) % 3) - 1;
+        int jz = (int) ((hj >>> 40) % 3) - 1;
+        int tx = clamp(x + jx, canopyR, 15 - canopyR);
+        int tz = clamp(z + jz, canopyR, 15 - canopyR);
+        int variant = (int) (roll * 7919.0 % 4);
+
         switch (type) {
-            case OAK -> placeOak(data, x, y, z, maxY, (int) (roll * 7919.0 % 3));
-            case PINE -> placePine(data, x, y, z, maxY, (int) (roll * 7919.0 % 3));
-            case ACACIA -> placeAcacia(data, x, y, z, maxY);
+            case OAK -> placeOak(data, tx, y - 2, tz, maxY, variant, elder);
+            case PINE -> placePine(data, tx, y - 2, tz, maxY, variant, elder);
+            case ACACIA -> placeAcacia(data, tx, y - 2, tz, maxY);
             default -> {
             }
         }
     }
 
-    private void placeOak(ChunkGenerator.@NotNull ChunkData data, int x, int y, int z, int maxY, int variant) {
-        int trunk = 4 + variant; // 4-6
+    /**
+     * Poisson-ish tree acceptance. A low-frequency grove field breaks uniform
+     * coverage into natural groves and clearings; local-minimum thinning then
+     * keeps a candidate only when no neighbouring candidate has a lower roll,
+     * which enforces irregular spacing with no visible lattice. Pure function
+     * of world coordinates — identical on both sides of every chunk border.
+     */
+    private static boolean acceptTree(@NotNull TerrainModel terrain, int wx, int wz,
+                                      @NotNull ForgeBiome biome, double densityMultiplier,
+                                      double roll) {
+        double grove = terrain.columnRandom(wx >> 3, wz >> 3, 0x620E5L);
+        double chance = biome.treeChance() * densityMultiplier * (0.25 + 1.5 * grove);
+        if (chance <= 0.0 || roll >= chance) {
+            return false;
+        }
+        for (int dz = -3; dz <= 3; dz++) {
+            for (int dx = -3; dx <= 3; dx++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                double nRoll = terrain.columnRandom(wx + dx, wz + dz, 0x7EE05L);
+                if (nRoll < chance && nRoll < roll) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static int clamp(int v, int lo, int hi) {
+        return v < lo ? lo : Math.min(v, hi);
+    }
+
+    private void placeOak(ChunkGenerator.@NotNull ChunkData data, int x, int y, int z, int maxY,
+                          int variant, boolean elder) {
+        int trunk = 4 + variant; // 4-7
         if (y + trunk + 2 >= maxY) {
             return;
         }
@@ -79,9 +135,10 @@ public final class TreePlacer {
         }
         BlockData leaves = oakLeaves;
         int top = y + trunk;
-        // Canopy: 3x3x2 blob with corners trimmed, plus a cap.
+        int bottomR = elder ? 3 : 2;
+        // Canopy: 3x3x2 blob with corners trimmed, plus a cap; elders spread wider.
         for (int dy = -2; dy <= 1; dy++) {
-            int r = dy <= -1 ? 2 : 1;
+            int r = dy <= -1 ? bottomR : 1;
             for (int dx = -r; dx <= r; dx++) {
                 for (int dz = -r; dz <= r; dz++) {
                     if (Math.abs(dx) == r && Math.abs(dz) == r && (dy == 1 || ((dx * dz + dy) & 1) == 0)) {
@@ -94,8 +151,9 @@ public final class TreePlacer {
         setLeaves(data, x, top + 1, z, leaves, Material.OAK_LEAVES);
     }
 
-    private void placePine(ChunkGenerator.@NotNull ChunkData data, int x, int y, int z, int maxY, int variant) {
-        int trunk = 6 + variant; // 6-8
+    private void placePine(ChunkGenerator.@NotNull ChunkData data, int x, int y, int z, int maxY,
+                           int variant, boolean elder) {
+        int trunk = 6 + variant % 3; // 6-8
         if (y + trunk + 1 >= maxY) {
             return;
         }
@@ -103,8 +161,10 @@ public final class TreePlacer {
             data.setBlock(x, y + i, z, Material.SPRUCE_LOG);
         }
         BlockData leaves = spruceLeaves;
-        // Three stacked discs shrinking toward the tip.
-        int[][] layers = {{3, 2}, {2, 2}, {1, 1}};
+        // Stacked discs shrinking toward the tip; elders get a wider skirt.
+        int[][] layers = elder
+                ? new int[][]{{4, 2}, {3, 2}, {2, 1}, {1, 1}}
+                : new int[][]{{3, 2}, {2, 2}, {1, 1}};
         int ly = y + 2;
         for (int[] layer : layers) {
             int r = layer[0];

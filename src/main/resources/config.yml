@@ -12,6 +12,10 @@ generation:
   tree-density: 1.0
   # Multiplier on mountain height (1.0 = designed height).
   mountain-scale: 1.0
+  # Mountain range rarity 0.0-1.0: how much land becomes dramatic ranges.
+  # 1.0 = mountains almost everywhere, 0.5 (default) = Earth-like:
+  # mellow rolling land with rare regional ranges.
+  mountain-rarity: 0.5
 
 features:
   # Vanilla cave carvers running on ForgeWorldGen terrain.

@@ -24,6 +24,15 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
     private volatile TerrainModel model;
     private volatile GenSettings settings;
 
+    /** Crater bowl radius in blocks; inside this the summit is carved concave. */
+    private static final double CRATER_RADIUS = 12.0;
+    /** How deep the crater bowl is carved at the summit centre. */
+    private static final int CRATER_DEPTH = 22;
+    /** Basalt rim ring width past the crater edge. */
+    private static final double RIM_WIDTH = 5.0;
+    /** Extra height of the basalt rim ring. */
+    private static final int RIM_LIFT = 2;
+
     private final TreePlacer trees;
     private final ForgeBiomeProvider biomeProvider;
 
@@ -34,7 +43,7 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         this.settings = settings;
         this.trees = new TreePlacer(oakLeaves, spruceLeaves, acaciaLeaves);
         this.biomeProvider = new ForgeBiomeProvider(new TerrainModel(0L, settings.seaLevel(),
-                settings.volcanoRarity(), settings.mountainScale()));
+                settings.volcanoRarity(), settings.mountainScale(), settings.mountainRarity()));
     }
 
     /** Applies new settings (e.g. after /fgen reload); models rebuild lazily. */
@@ -53,7 +62,8 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
             synchronized (modelLock) {
                 current = model;
                 if (current == null || current.seed() != seed) {
-                    current = new TerrainModel(seed, snap.seaLevel(), snap.volcanoRarity(), snap.mountainScale());
+                    current = new TerrainModel(seed, snap.seaLevel(), snap.volcanoRarity(),
+                            snap.mountainScale(), snap.mountainRarity());
                     model = current;
                 }
             }
@@ -77,6 +87,28 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                 int wx = baseX + x;
                 int wz = baseZ + z;
                 int h = terrain.heightAt(wx, wz);
+                double volcanoDist = terrain.volcanoDistance(wx, wz);
+
+                // Volcano crater: carve a concave bowl into the summit with a
+                // basalt rim ring; lava pools flat inside the depression.
+                boolean inCrater = false;
+                boolean inRim = false;
+                int lavaY = -1;
+                if (volcanoDist >= 0.0) {
+                    if (volcanoDist < CRATER_RADIUS) {
+                        double t = volcanoDist / CRATER_RADIUS;
+                        h -= (int) Math.round(CRATER_DEPTH * (1.0 - t * t));
+                        inCrater = true;
+                        long center = terrain.volcanoCenter(wx, wz);
+                        int peakH = Math.min(terrain.heightAt((int) (center >> 32), (int) center),
+                                maxY - 24);
+                        lavaY = peakH - CRATER_DEPTH + 3;
+                    } else if (volcanoDist < CRATER_RADIUS + RIM_WIDTH) {
+                        h += RIM_LIFT;
+                        inRim = true;
+                    }
+                }
+
                 if (h < minY + 6) {
                     h = minY + 6;
                 } else if (h > maxY - 24) {
@@ -102,19 +134,20 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                 ForgeBiome biome = biomeProvider.pick(worldInfo, wx, wz);
                 double slope = slopeAt(terrain, wx, wz, h);
                 double moist = terrain.moistureAt(wx, wz);
-                double volcanoDist = terrain.volcanoDistance(wx, wz);
 
                 Material surface = surfaceBlock(terrain, biome, slope, h, sea, moist, wx, wz, volcanoDist);
+                if (inCrater || inRim) {
+                    surface = Material.BASALT; // crater floor, walls and rim ring
+                }
                 chunkData.setBlock(x, h, z, surface);
 
                 if (h < sea) {
                     chunkData.setRegion(x, h + 1, z, x + 1, sea + 1, z + 1, Material.WATER);
                 }
 
-                // Volcano crater: lava pool with a magma rim.
-                if (volcanoDist >= 0.0 && volcanoDist < 9.0) {
-                    chunkData.setBlock(x, h, z, Material.LAVA);
-                    chunkData.setBlock(x, h - 1, z, Material.BASALT);
+                // Lava lake pooled flat inside the crater bowl.
+                if (inCrater && h < lavaY) {
+                    chunkData.setRegion(x, h + 1, z, x + 1, lavaY + 1, z + 1, Material.LAVA);
                 }
 
                 // Trees stay 2 blocks inside the border so they never cross chunks.
@@ -123,6 +156,21 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                 }
             }
         }
+    }
+
+    /**
+     * Sedimentary strata for cliffs and steep faces: horizontal bands warped
+     * by low-frequency noise so they undulate naturally, alternating light
+     * and dark rock with an occasional tuff seam (Growth reference terrain).
+     * Cheap: one 2-octave noise sample per steep column.
+     */
+    private static @NotNull Material strataRock(TerrainModel terrain, int wx, int wz, int h) {
+        double warp = terrain.strataWarp(wx, wz);
+        long band = Math.floorDiv((int) Math.floor(h + warp), 4);
+        if (Math.floorMod(band, 10) == 0) {
+            return Material.TUFF;
+        }
+        return Math.floorMod(band, 2) == 0 ? Material.STONE : Material.ANDESITE;
     }
 
     private static double slopeAt(TerrainModel terrain, int x, int z, int h) {
@@ -148,12 +196,8 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         if (h <= sea + 1) {
             return Material.SAND; // beach band
         }
-        if (slope > 0.95) {
-            return Material.STONE;
-        }
         if (slope > 0.62) {
-            return ((TerrainModel.hash2(terrain.seed() ^ 0x9A9E1L, wx, wz) & 1) == 0)
-                    ? Material.GRAVEL : Material.STONE;
+            return strataRock(terrain, wx, wz, h);
         }
         switch (biome) {
             case FROSTCAP_PEAKS -> {
