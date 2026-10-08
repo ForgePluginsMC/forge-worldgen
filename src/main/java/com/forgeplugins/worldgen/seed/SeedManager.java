@@ -38,4 +38,18 @@ public final class SeedManager {
         z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
         return z ^ (z >>> 31);
     }
+
+    /** Deterministic 64-bit mix of a seed and integer coordinates. */
+    public static long hash2(long seed, int x, int z) {
+        long h = seed ^ (x * 0x9E3779B1L) ^ (z * 0x85EBCA6BL);
+        h ^= h >>> 29;
+        h *= 0xBF58476D1CE4E5B9L;
+        h ^= h >>> 32;
+        return h;
+    }
+
+    /** Maps a hash to a uniform double in [0, 1). */
+    public static double toUnit(long h) {
+        return (h >>> 11) * 0x1p-53;
+    }
 }

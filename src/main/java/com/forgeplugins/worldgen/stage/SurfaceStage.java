@@ -9,7 +9,11 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Surface stage — runs in {@code generateSurface}, after vanilla's surface
  * step (API contract), and repaints the top layers from each biome's
- * palette: topsoil, subsurface, snow caps, volcanic ash and mountain scree.
+ * palette.
+ *
+ * <p>Two things keep it natural: biome borders are <em>dithered</em> (no
+ * hard transitions — nearby columns blend over ~14 blocks), and every biome
+ * paints warm/cold patch variants from its palette instead of flat color.
  */
 public final class SurfaceStage implements GenStage {
 
@@ -30,16 +34,18 @@ public final class SurfaceStage implements GenStage {
                 int wx = baseX + x;
                 int wz = baseZ + z;
                 int h = Math.clamp(ctx.terrain.heightAt(wx, wz), minY + 1, maxY - 1);
-                ForgeBiome biome = ctx.biomes.biomeAt(wx, wz);
+                ForgeBiome biome = blendedBiome(ctx, wx, wz);
 
                 Material top = biome.surface();
                 double var = ctx.terrain.surfaceVariationAt(wx, wz);
-                if (biome == ForgeBiome.VOLCANIC && var > 0.45) {
-                    top = Material.GRAVEL; // ash fields
-                } else if (biome == ForgeBiome.MOUNTAINS && var > 0.55) {
-                    top = Material.GRAVEL; // scree slopes
-                } else if (biome == ForgeBiome.SCABLAND && var > 0.50) {
-                    top = Material.BASALT; // exposed basalt flats
+                if (var > 0.55) {
+                    top = biome.patchWarm();
+                } else if (var < -0.55) {
+                    top = biome.patchCold();
+                }
+                // Gravel beaches: coarser patches of gravel among the sand.
+                if (biome == ForgeBiome.BEACH && var > 0.25 && var <= 0.55) {
+                    top = Material.GRAVEL;
                 }
 
                 ctx.data.setBlock(x, h, z, top);
@@ -53,5 +59,48 @@ public final class SurfaceStage implements GenStage {
                 }
             }
         }
+    }
+
+    /**
+     * Dithered biome blend. Samples the column and four neighbors 7 blocks
+     * out; where they agree the biome is pure, where they differ the winner
+     * is picked per 4x4 cell by hash — a noisy natural transition instead
+     * of a hard border.
+     */
+    private @NotNull ForgeBiome blendedBiome(@NotNull ChunkContext ctx, int x, int z) {
+        ForgeBiome center = ctx.biomes.biomeAt(x, z);
+        ForgeBiome a = ctx.biomes.biomeAt(x + 7, z);
+        ForgeBiome b = ctx.biomes.biomeAt(x - 7, z);
+        ForgeBiome c = ctx.biomes.biomeAt(x, z + 7);
+        ForgeBiome d = ctx.biomes.biomeAt(x, z - 7);
+        if (a == center && b == center && c == center && d == center) {
+            return center;
+        }
+        ForgeBiome[] distinct = new ForgeBiome[5];
+        int n = 0;
+        for (ForgeBiome candidate : new ForgeBiome[] {center, a, b, c, d}) {
+            boolean seen = false;
+            for (int i = 0; i < n; i++) {
+                if (distinct[i] == candidate) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                distinct[n++] = candidate;
+            }
+        }
+        long hash = hash2(ctx.seed, x >> 2, z >> 2);
+        double unit = (hash >>> 11) * 0x1p-53;
+        return distinct[(int) (unit * n)];
+    }
+
+    /** Deterministic 64-bit mix of seed and column coordinates. */
+    private static long hash2(long seed, int x, int z) {
+        long h = seed ^ (x * 0x9E3779B1L) ^ (z * 0x85EBCA6BL);
+        h ^= h >>> 29;
+        h *= 0xBF58476D1CE4E5B9L;
+        h ^= h >>> 32;
+        return h;
     }
 }

@@ -36,7 +36,7 @@ public final class BiomeModel {
         if (h < sea) {
             return ForgeBiome.OCEAN;
         }
-        if (h <= sea + 2) {
+        if (h <= sea + 1) {
             return ForgeBiome.BEACH;
         }
         if (terrain.scablandFactorAt(x, z) > 0.5) {

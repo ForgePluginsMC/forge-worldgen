@@ -71,14 +71,23 @@ public final class TerrainEngine {
         double hill = hills.fbm(x / 768.0, z / 768.0, 4, 2.0, 0.5);
         double h = config.seaLevel() + 3.0 + cont * 16.0 + hill * 13.0;
 
-        // Mountain ranges where the relief mask runs high.
+        // Mountain ranges where the relief mask runs high. The ridge profile
+        // is deliberately rounded (pow 0.75) — sharp knife-edge crests looked
+        // wrong — and the massif has a solid base lift, not just thin peaks.
         double mask = relief.fbm(x / 2048.0, z / 2048.0, 3, 2.0, 0.5);
         double m = sstep(0.22, 0.60, mask);
-        double ridge = 1.0 - Math.abs(relief.noise(x / 320.0, z / 320.0));
-        h += m * m * ridge * ridge * 150.0 * config.mountainAmp();
+        double ridge = 1.0 - Math.abs(relief.noise(x / 420.0, z / 420.0));
+        ridge = Math.pow(ridge, 0.75);
+        h += m * m * (0.30 + 0.70 * ridge) * 150.0 * config.mountainAmp();
 
         // Fine detail.
         h += hills.noise(x / 24.0, z / 24.0) * 2.5;
+
+        // Rugged medium-frequency detail — gated to land so the ocean cliffs
+        // keep their character. This is what breaks the "too smooth" look.
+        double rugged = relief.fbm(x / 96.0, z / 96.0, 3, 2.0, 0.5);
+        double landGate = sstep(config.seaLevel() - 6.0, config.seaLevel() + 2.0, h);
+        h += rugged * 9.0 * config.ruggedness() * (0.15 + 0.85 * Math.max(m, landGate));
 
         // Rivers carve valleys.
         if (config.rivers()) {

@@ -17,10 +17,24 @@ terrain:
   # Chance per 1536-block grid cell of holding a volcano, 0.0 to 1.0.
   # 0.06 ≈ one volcano every ~40x40 chunks on average.
   volcano-rarity: 0.06
+  # Medium-frequency rugged detail, 0.0 (smooth) to 2.0. Gated to land —
+  # the ocean cliffs keep their character either way.
+  ruggedness: 1.0
   # River valleys carved into the terrain.
   rivers: true
   # Scabland coulee channels on plateau country (Dry Falls flavor).
   scablands: true
+
+vegetation:
+  # Our custom trees (huge oaks, pines, redwoods, palms). Vanilla trees from
+  # the decorations feature still spawn alongside them.
+  custom-trees: true
+  # Overall tree density multiplier, 0.0 to 3.0.
+  tree-density: 1.0
+  # Surface vegetation: grass, flowers, mushrooms, moss, berries, cane, kelp…
+  decorations: true
+  # Vegetation density multiplier, 0.0 to 3.0.
+  decor-density: 1.0
 
 features:
   # Vanilla cave carvers running on ForgeWorldGen terrain.

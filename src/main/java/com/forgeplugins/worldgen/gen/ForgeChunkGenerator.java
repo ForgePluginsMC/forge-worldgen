@@ -5,8 +5,10 @@ import com.forgeplugins.worldgen.biome.ForgeBiome;
 import com.forgeplugins.worldgen.config.GenConfig;
 import com.forgeplugins.worldgen.pipeline.ChunkContext;
 import com.forgeplugins.worldgen.pipeline.GenPipeline;
+import com.forgeplugins.worldgen.stage.DecorationStage;
 import com.forgeplugins.worldgen.stage.SurfaceStage;
 import com.forgeplugins.worldgen.stage.TerrainStage;
+import com.forgeplugins.worldgen.stage.TreeStage;
 import com.forgeplugins.worldgen.terrain.TerrainEngine;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -72,7 +74,7 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
                     BiomeModel biomes = new BiomeModel(seed, terrain);
                     GenPipeline pipeline = new GenPipeline(
                             List.of(new TerrainStage()),
-                            List.of(new SurfaceStage()));
+                            List.of(new SurfaceStage(), new TreeStage(), new DecorationStage()));
                     set = new EngineSet(terrain, biomes, pipeline,
                             new ForgeBiomeProvider(biomes));
                     engines.put(seed, set);
@@ -190,7 +192,7 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
 
     @Override
     public boolean shouldGenerateDecorations() {
-        return config.decorations();
+        return config.vanillaDecorations();
     }
 
     @Override
