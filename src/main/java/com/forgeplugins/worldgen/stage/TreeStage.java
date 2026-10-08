@@ -24,7 +24,7 @@ public final class TreeStage implements GenStage {
     private static final long POS_XOR = 0xB0517107L;
 
     private enum TreeType {
-        OAK, HUGE_OAK, BIRCH, DARK_OAK, JUNGLE_TREE,
+        OAK, HUGE_OAK, BIRCH, DARK_OAK, JUNGLE_TREE, PALE_OAK, ACACIA,
         PINE, SPRUCE, REDWOOD, PALM, CHERRY, MANGROVE,
         GIANT_RED_MUSHROOM, GIANT_BROWN_MUSHROOM
     }
@@ -84,12 +84,13 @@ public final class TreeStage implements GenStage {
         double typeRoll = SeedManager.toUnit(h1 ^ 0x51AB3F9CL);
         TreeType type = pickType(biome, typeRoll);
         int trunkH = switch (type) {
-            case OAK, BIRCH, CHERRY -> 5 + (int) (typeRoll * 97) % 3;
+            case OAK, BIRCH, CHERRY, PALE_OAK -> 5 + (int) (typeRoll * 97) % 3;
             case HUGE_OAK, DARK_OAK -> 10 + (int) (typeRoll * 131) % 5;
             case PINE, SPRUCE -> 9 + (int) (typeRoll * 57) % 5;
             case JUNGLE_TREE -> 12 + (int) (typeRoll * 149) % 8;
             case REDWOOD -> 22 + (int) (typeRoll * 211) % 9;
             case PALM -> 6 + (int) (typeRoll * 37) % 4;
+            case ACACIA -> 6 + (int) (typeRoll * 41) % 3;
             case MANGROVE -> 5 + (int) (typeRoll * 43) % 3;
             case GIANT_RED_MUSHROOM, GIANT_BROWN_MUSHROOM -> 6 + (int) (typeRoll * 29) % 4;
         };
@@ -102,21 +103,35 @@ public final class TreeStage implements GenStage {
     private double treeDensity(@NotNull ForgeBiome biome) {
         return switch (biome) {
             case FOREST -> 0.50;
+            case FLOWER_FOREST -> 0.45;
             case BIRCH_FOREST -> 0.45;
+            case OLD_GROWTH_BIRCH_FOREST -> 0.55;
             case DARK_FOREST -> 0.55;
-            case JUNGLE -> 0.60;
-            case TAIGA -> 0.40;
             case CHERRY_GROVE -> 0.35;
-            case PLAINS -> 0.10;
-            case MEADOW -> 0.08;
-            case SNOWY -> 0.22;
+            case PALE_GARDEN -> 0.40;
+            case DAPPLED_FOREST -> 0.50;
+            case JUNGLE -> 0.60;
+            case SPARSE_JUNGLE -> 0.35;
+            case BAMBOO_JUNGLE -> 0.40;
+            case TAIGA -> 0.40;
             case SNOWY_TAIGA -> 0.30;
+            case OLD_GROWTH_PINE_TAIGA, OLD_GROWTH_SPRUCE_TAIGA -> 0.55;
             case GROVE -> 0.25;
-            case MOUNTAINS -> 0.05;
-            case BEACH -> 0.16;
+            case PLAINS -> 0.10;
+            case SUNFLOWER_PLAINS -> 0.08;
+            case SNOWY_PLAINS -> 0.15;
+            case MEADOW -> 0.08;
+            case SAVANNA -> 0.20;
+            case SAVANNA_PLATEAU -> 0.18;
+            case WINDSWEPT_SAVANNA -> 0.12;
+            case WINDSWEPT_FOREST -> 0.35;
+            case WOODED_BADLANDS -> 0.15;
             case SWAMP -> 0.20;
             case MANGROVE_SWAMP -> 0.35;
             case MUSHROOM_FIELDS -> 0.25;
+            case LUSH_CAVES -> 0.20;
+            case BEACH -> 0.16;
+            case WINDSWEPT_HILLS -> 0.05;
             default -> 0.0;
         };
     }
@@ -125,18 +140,30 @@ public final class TreeStage implements GenStage {
         return switch (biome) {
             case FOREST -> r < 0.25 ? TreeType.HUGE_OAK : r < 0.55 ? TreeType.OAK
                     : r < 0.75 ? TreeType.PINE : r < 0.85 ? TreeType.REDWOOD : TreeType.OAK;
+            case FLOWER_FOREST -> r < 0.70 ? TreeType.OAK : TreeType.BIRCH;
             case BIRCH_FOREST -> r < 0.80 ? TreeType.BIRCH : TreeType.OAK;
+            case OLD_GROWTH_BIRCH_FOREST -> TreeType.BIRCH;
             case DARK_FOREST -> r < 0.70 ? TreeType.DARK_OAK : TreeType.OAK;
-            case JUNGLE -> r < 0.70 ? TreeType.JUNGLE_TREE : r < 0.85 ? TreeType.OAK : TreeType.PINE;
-            case TAIGA, SNOWY_TAIGA, GROVE -> r < 0.80 ? TreeType.SPRUCE : TreeType.PINE;
             case CHERRY_GROVE -> TreeType.CHERRY;
-            case PLAINS, MEADOW -> r < 0.70 ? TreeType.OAK : TreeType.HUGE_OAK;
-            case SNOWY -> r < 0.85 ? TreeType.PINE : TreeType.OAK;
-            case MOUNTAINS -> TreeType.PINE;
+            case PALE_GARDEN -> TreeType.PALE_OAK;
+            case DAPPLED_FOREST -> r < 0.50 ? TreeType.OAK : TreeType.BIRCH;
+            case JUNGLE -> r < 0.70 ? TreeType.JUNGLE_TREE : r < 0.85 ? TreeType.OAK : TreeType.PINE;
+            case SPARSE_JUNGLE -> r < 0.60 ? TreeType.JUNGLE_TREE : TreeType.OAK;
+            case BAMBOO_JUNGLE -> r < 0.50 ? TreeType.JUNGLE_TREE : TreeType.OAK;
+            case TAIGA, SNOWY_TAIGA, GROVE -> r < 0.80 ? TreeType.SPRUCE : TreeType.PINE;
+            case OLD_GROWTH_PINE_TAIGA -> TreeType.PINE;
+            case OLD_GROWTH_SPRUCE_TAIGA -> TreeType.SPRUCE;
+            case PLAINS, SUNFLOWER_PLAINS, MEADOW -> r < 0.70 ? TreeType.OAK : TreeType.HUGE_OAK;
+            case SNOWY_PLAINS -> r < 0.85 ? TreeType.PINE : TreeType.OAK;
+            case SAVANNA, SAVANNA_PLATEAU, WINDSWEPT_SAVANNA -> TreeType.ACACIA;
+            case WINDSWEPT_FOREST -> r < 0.60 ? TreeType.OAK : TreeType.SPRUCE;
+            case WOODED_BADLANDS -> r < 0.70 ? TreeType.OAK : TreeType.ACACIA;
+            case WINDSWEPT_HILLS -> TreeType.PINE;
             case BEACH -> TreeType.PALM;
             case SWAMP -> r < 0.70 ? TreeType.OAK : TreeType.BIRCH;
             case MANGROVE_SWAMP -> TreeType.MANGROVE;
             case MUSHROOM_FIELDS -> r < 0.50 ? TreeType.GIANT_RED_MUSHROOM : TreeType.GIANT_BROWN_MUSHROOM;
+            case LUSH_CAVES -> r < 0.60 ? TreeType.OAK : TreeType.BIRCH;
             default -> TreeType.OAK;
         };
     }
@@ -147,6 +174,8 @@ public final class TreeStage implements GenStage {
             case HUGE_OAK -> growOak(ctx, baseX, baseZ, spot, Material.OAK_LOG, Material.OAK_LEAVES, true);
             case BIRCH -> growOak(ctx, baseX, baseZ, spot, Material.BIRCH_LOG, Material.BIRCH_LEAVES, false);
             case DARK_OAK -> growOak(ctx, baseX, baseZ, spot, Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, true);
+            case PALE_OAK -> growOak(ctx, baseX, baseZ, spot, Material.PALE_OAK_LOG, Material.PALE_OAK_LEAVES, false);
+            case ACACIA -> growAcacia(ctx, baseX, baseZ, spot);
             case JUNGLE_TREE -> growJungle(ctx, baseX, baseZ, spot);
             case PINE -> growPine(ctx, baseX, baseZ, spot, Material.SPRUCE_LOG, Material.SPRUCE_LEAVES);
             case SPRUCE -> growSpruce(ctx, baseX, baseZ, spot);
@@ -236,6 +265,21 @@ public final class TreeStage implements GenStage {
                 leaf(ctx, baseX, baseZ, vx, vy - i, vz, Material.VINE);
             }
         }
+    }
+
+    private void growAcacia(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {
+        // Acacia: angled trunk with flat umbrella canopy.
+        int top = spot.baseY + spot.trunkH;
+        // Slight lean.
+        int lean = spot.leanX;
+        for (int i = 1; i <= spot.trunkH; i++) {
+            int lx = spot.x + (lean * i) / spot.trunkH;
+            wood(ctx, baseX, baseZ, lx, spot.baseY + i, spot.z, Material.ACACIA_LOG);
+        }
+        int cx = spot.x + lean;
+        // Flat canopy.
+        disc(ctx, baseX, baseZ, cx, top, spot.z, 3, Material.ACACIA_LEAVES);
+        disc(ctx, baseX, baseZ, cx, top + 1, spot.z, 2, Material.ACACIA_LEAVES);
     }
 
     private void growMangrove(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {

@@ -65,31 +65,50 @@ public final class DecorationStage implements GenStage {
 
     private double baseChance(@NotNull ForgeBiome biome) {
         return switch (biome) {
-            case PLAINS -> 0.50;
+            case PLAINS, SUNFLOWER_PLAINS -> 0.50;
+            case SNOWY_PLAINS -> 0.18;
+            case ICE_SPIKES -> 0.05;
             case FOREST -> 0.55;
+            case FLOWER_FOREST -> 0.65;
             case BIRCH_FOREST -> 0.50;
+            case OLD_GROWTH_BIRCH_FOREST -> 0.55;
             case DARK_FOREST -> 0.60;
-            case JUNGLE -> 0.65;
-            case TAIGA -> 0.45;
             case CHERRY_GROVE -> 0.55;
+            case PALE_GARDEN -> 0.40;
+            case DAPPLED_FOREST -> 0.55;
+            case TAIGA -> 0.45;
+            case SNOWY_TAIGA -> 0.20;
+            case OLD_GROWTH_PINE_TAIGA, OLD_GROWTH_SPRUCE_TAIGA -> 0.50;
+            case JUNGLE -> 0.65;
+            case SPARSE_JUNGLE -> 0.45;
+            case BAMBOO_JUNGLE -> 0.60;
+            case SAVANNA -> 0.35;
+            case SAVANNA_PLATEAU -> 0.30;
+            case WINDSWEPT_SAVANNA -> 0.25;
             case DESERT -> 0.08;
+            case BADLANDS -> 0.08;
+            case WOODED_BADLANDS -> 0.15;
+            case ERODED_BADLANDS -> 0.06;
             case BEACH -> 0.06;
+            case SNOWY_BEACH -> 0.04;
             case STONY_SHORE -> 0.04;
-            case MOUNTAINS -> 0.12;
+            case WINDSWEPT_HILLS -> 0.12;
+            case WINDSWEPT_GRAVELLY_HILLS -> 0.08;
+            case WINDSWEPT_FOREST -> 0.35;
             case MEADOW -> 0.55;
+            case GROVE -> 0.15;
+            case SNOWY_SLOPES -> 0.08;
+            case FROZEN_PEAKS, JAGGED_PEAKS, STONY_PEAKS -> 0.05;
             case VOLCANIC -> 0.03;
             case SCABLAND -> 0.12;
-            case BADLANDS -> 0.08;
-            case ERODED_BADLANDS -> 0.06;
-            case SNOWY -> 0.18;
-            case SNOWY_TAIGA -> 0.20;
-            case GROVE -> 0.15;
-            case FROZEN_PEAKS -> 0.05;
             case SWAMP -> 0.45;
             case MANGROVE_SWAMP -> 0.50;
-            case RIVER -> 0.30;
+            case RIVER, FROZEN_RIVER -> 0.30;
             case MUSHROOM_FIELDS -> 0.40;
-            case OCEAN, DEEP_OCEAN, WARM_OCEAN, LUKEWARM_OCEAN -> 0.0;
+            case LUSH_CAVES -> 0.50;
+            case DRIPSTONE_CAVES, DEEP_DARK, SULFUR_CAVES -> 0.10;
+            case OCEAN, DEEP_OCEAN, WARM_OCEAN, LUKEWARM_OCEAN, DEEP_LUKEWARM_OCEAN,
+                 COLD_OCEAN, DEEP_COLD_OCEAN, FROZEN_OCEAN, DEEP_FROZEN_OCEAN -> 0.0;
         };
     }
 
@@ -117,8 +136,22 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.945) put(ctx, x, y, z, Material.PUMPKIN);
                 else put(ctx, x, y, z, Material.FERN);
             }
+            case SUNFLOWER_PLAINS -> {
+                if (pick < 0.40) put(ctx, x, y, z, Material.SUNFLOWER);
+                else if (pick < 0.60) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.75) put(ctx, x, y, z, Material.DANDELION);
+                else put(ctx, x, y, z, Material.POPPY);
+            }
+            case SNOWY_PLAINS -> {
+                if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.90) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
+                else put(ctx, x, y, z, Material.FERN);
+            }
+            case ICE_SPIKES -> {
+                if (pick < 0.70) put(ctx, x, y, z, Material.PACKED_ICE);
+                else put(ctx, x, y, z, Material.BLUE_ICE);
+            }
             case FOREST -> {
-                // Mushrooms only take on podzol/moss — anywhere else they'd pop off.
                 boolean shady = ground == Material.PODZOL || ground == Material.MOSS_BLOCK;
                 if (pick < 0.50) put(ctx, x, y, z, Material.SHORT_GRASS);
                 else if (pick < 0.60) put(ctx, x, y, z, Material.FERN);
@@ -130,7 +163,16 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.97) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
                 else put(ctx, x, y, z, Material.SHORT_GRASS);
             }
-            case BIRCH_FOREST -> {
+            case FLOWER_FOREST -> {
+                if (pick < 0.30) put(ctx, x, y, z, Material.POPPY);
+                else if (pick < 0.45) put(ctx, x, y, z, Material.DANDELION);
+                else if (pick < 0.60) put(ctx, x, y, z, Material.ALLIUM);
+                else if (pick < 0.70) put(ctx, x, y, z, Material.AZURE_BLUET);
+                else if (pick < 0.80) put(ctx, x, y, z, Material.CORNFLOWER);
+                else if (pick < 0.90) put(ctx, x, y, z, Material.OXEYE_DAISY);
+                else put(ctx, x, y, z, Material.SHORT_GRASS);
+            }
+            case BIRCH_FOREST, OLD_GROWTH_BIRCH_FOREST -> {
                 if (pick < 0.55) put(ctx, x, y, z, Material.SHORT_GRASS);
                 else if (pick < 0.65) put(ctx, x, y, z, Material.FERN);
                 else if (pick < 0.75) put(ctx, x, y, z, Material.DANDELION);
@@ -146,6 +188,34 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.85) put(ctx, x, y, z, Material.FERN);
                 else put(ctx, x, y, z, Material.MOSS_CARPET);
             }
+            case CHERRY_GROVE -> {
+                if (pick < 0.45) put(ctx, x, y, z, Material.PINK_PETALS);
+                else if (pick < 0.65) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.80) put(ctx, x, y, z, Material.DANDELION);
+                else put(ctx, x, y, z, Material.POPPY);
+            }
+            case PALE_GARDEN -> {
+                if (pick < 0.50) put(ctx, x, y, z, Material.PALE_MOSS_CARPET);
+                else if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else put(ctx, x, y, z, Material.FERN);
+            }
+            case DAPPLED_FOREST -> {
+                if (pick < 0.40) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.60) put(ctx, x, y, z, Material.FERN);
+                else if (pick < 0.75) put(ctx, x, y, z, Material.MOSS_CARPET);
+                else put(ctx, x, y, z, Material.DANDELION);
+            }
+            case TAIGA, OLD_GROWTH_PINE_TAIGA, OLD_GROWTH_SPRUCE_TAIGA -> {
+                if (pick < 0.50) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.65) put(ctx, x, y, z, Material.FERN);
+                else if (pick < 0.80) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
+                else put(ctx, x, y, z, Material.LARGE_FERN);
+            }
+            case SNOWY_TAIGA, GROVE -> {
+                if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.90) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
+                else put(ctx, x, y, z, Material.FERN);
+            }
             case JUNGLE -> {
                 if (pick < 0.40) put(ctx, x, y, z, Material.SHORT_GRASS);
                 else if (pick < 0.55) put(ctx, x, y, z, Material.FERN);
@@ -154,17 +224,21 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.85) put(ctx, x, y, z, Material.VINE);
                 else put(ctx, x, y, z, Material.COCOA);
             }
-            case TAIGA -> {
+            case SPARSE_JUNGLE -> {
                 if (pick < 0.50) put(ctx, x, y, z, Material.SHORT_GRASS);
-                else if (pick < 0.65) put(ctx, x, y, z, Material.FERN);
-                else if (pick < 0.80) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
-                else put(ctx, x, y, z, Material.LARGE_FERN);
+                else if (pick < 0.70) put(ctx, x, y, z, Material.FERN);
+                else if (pick < 0.85) put(ctx, x, y, z, Material.MELON);
+                else put(ctx, x, y, z, Material.VINE);
             }
-            case CHERRY_GROVE -> {
-                if (pick < 0.45) put(ctx, x, y, z, Material.PINK_PETALS);
-                else if (pick < 0.65) put(ctx, x, y, z, Material.SHORT_GRASS);
-                else if (pick < 0.80) put(ctx, x, y, z, Material.DANDELION);
-                else put(ctx, x, y, z, Material.POPPY);
+            case BAMBOO_JUNGLE -> {
+                if (pick < 0.60) column(ctx, x, y, z, Material.BAMBOO, 4);
+                else if (pick < 0.80) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else put(ctx, x, y, z, Material.FERN);
+            }
+            case SAVANNA, SAVANNA_PLATEAU, WINDSWEPT_SAVANNA -> {
+                if (pick < 0.60) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.80) put(ctx, x, y, z, Material.TALL_GRASS);
+                else put(ctx, x, y, z, Material.DEAD_BUSH);
             }
             case DESERT -> {
                 if (pick < 0.75) put(ctx, x, y, z, Material.DEAD_BUSH);
@@ -175,6 +249,11 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.90) column(ctx, x, y, z, Material.CACTUS, 2);
                 else put(ctx, x, y, z, Material.RED_SAND);
             }
+            case WOODED_BADLANDS -> {
+                if (pick < 0.50) put(ctx, x, y, z, Material.DEAD_BUSH);
+                else if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else put(ctx, x, y, z, Material.COARSE_DIRT);
+            }
             case MEADOW -> {
                 if (pick < 0.40) put(ctx, x, y, z, Material.SHORT_GRASS);
                 else if (pick < 0.55) put(ctx, x, y, z, Material.DANDELION);
@@ -183,14 +262,22 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.90) put(ctx, x, y, z, Material.OXEYE_DAISY);
                 else put(ctx, x, y, z, Material.ALLIUM);
             }
-            case SNOWY_TAIGA, GROVE -> {
-                if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
-                else if (pick < 0.90) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
-                else put(ctx, x, y, z, Material.FERN);
-            }
-            case FROZEN_PEAKS -> {
+            case SNOWY_SLOPES -> {
                 if (pick < 0.80) put(ctx, x, y, z, Material.PACKED_ICE);
                 else put(ctx, x, y, z, Material.BLUE_ICE);
+            }
+            case FROZEN_PEAKS, JAGGED_PEAKS, STONY_PEAKS -> {
+                if (pick < 0.80) put(ctx, x, y, z, Material.PACKED_ICE);
+                else put(ctx, x, y, z, Material.BLUE_ICE);
+            }
+            case WINDSWEPT_HILLS, WINDSWEPT_GRAVELLY_HILLS -> {
+                if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else put(ctx, x, y, z, Material.FERN);
+            }
+            case WINDSWEPT_FOREST -> {
+                if (pick < 0.50) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.70) put(ctx, x, y, z, Material.FERN);
+                else put(ctx, x, y, z, Material.MOSS_CARPET);
             }
             case SWAMP -> {
                 if (pick < 0.35) put(ctx, x, y, z, Material.LILY_PAD);
@@ -210,31 +297,37 @@ public final class DecorationStage implements GenStage {
                 else if (pick < 0.80) put(ctx, x, y, z, Material.BROWN_MUSHROOM);
                 else put(ctx, x, y, z, Material.MYCELIUM);
             }
+            case LUSH_CAVES -> {
+                if (pick < 0.40) put(ctx, x, y, z, Material.MOSS_CARPET);
+                else if (pick < 0.60) put(ctx, x, y, z, Material.SHORT_GRASS);
+                else if (pick < 0.75) put(ctx, x, y, z, Material.SPORE_BLOSSOM);
+                else put(ctx, x, y, z, Material.FERN);
+            }
+            case DRIPSTONE_CAVES -> {
+                if (pick < 0.60) put(ctx, x, y, z, Material.POINTED_DRIPSTONE);
+                else put(ctx, x, y, z, Material.DRIPSTONE_BLOCK);
+            }
+            case DEEP_DARK, SULFUR_CAVES -> {
+                if (pick < 0.70) put(ctx, x, y, z, Material.SCULK);
+                else put(ctx, x, y, z, Material.SCULK_VEIN);
+            }
             case STONY_SHORE -> put(ctx, x, y, z, Material.DEAD_BUSH);
-            case BEACH -> {
+            case BEACH, SNOWY_BEACH -> {
                 if (pick < 0.60) column(ctx, x, y, z, Material.SUGAR_CANE, 2);
                 else put(ctx, x, y, z, Material.DEAD_BUSH);
-            }
-            case MOUNTAINS -> {
-                if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
-                else put(ctx, x, y, z, Material.FERN);
             }
             case VOLCANIC -> put(ctx, x, y, z, Material.DEAD_BUSH);
             case SCABLAND -> {
                 if (pick < 0.60) put(ctx, x, y, z, Material.DEAD_BUSH);
                 else put(ctx, x, y, z, Material.SHORT_GRASS);
             }
-            case SNOWY -> {
-                if (pick < 0.70) put(ctx, x, y, z, Material.SHORT_GRASS);
-                else if (pick < 0.90) put(ctx, x, y, z, Material.SWEET_BERRY_BUSH);
-                else put(ctx, x, y, z, Material.FERN);
-            }
-            case RIVER -> {
+            case RIVER, FROZEN_RIVER -> {
                 if (pick < 0.65) column(ctx, x, y, z, Material.SUGAR_CANE, 3);
                 else if (pick < 0.85) put(ctx, x, y, z, Material.SHORT_GRASS);
                 else put(ctx, x, y, z, Material.CLAY);
             }
-            case OCEAN, DEEP_OCEAN -> { /* handled as underwater */ }
+            case WARM_OCEAN, LUKEWARM_OCEAN, DEEP_LUKEWARM_OCEAN, OCEAN, DEEP_OCEAN,
+                 COLD_OCEAN, DEEP_COLD_OCEAN, FROZEN_OCEAN, DEEP_FROZEN_OCEAN -> { /* handled as underwater */ }
         }
     }
 
@@ -248,7 +341,9 @@ public final class DecorationStage implements GenStage {
         ForgeBiome biome = ctx.biomes.biomeAt(wx, wz);
         boolean warm = biome == ForgeBiome.WARM_OCEAN;
         boolean ocean = warm || biome == ForgeBiome.OCEAN || biome == ForgeBiome.DEEP_OCEAN
-                || biome == ForgeBiome.LUKEWARM_OCEAN;
+                || biome == ForgeBiome.LUKEWARM_OCEAN || biome == ForgeBiome.DEEP_LUKEWARM_OCEAN
+                || biome == ForgeBiome.COLD_OCEAN || biome == ForgeBiome.DEEP_COLD_OCEAN
+                || biome == ForgeBiome.FROZEN_OCEAN || biome == ForgeBiome.DEEP_FROZEN_OCEAN;
         double chance = (ocean ? 0.55 : 0.18) * density;
         if (roll >= chance) {
             return;
@@ -326,7 +421,7 @@ public final class DecorationStage implements GenStage {
                     || ground == Material.MUD || ground == Material.MYCELIUM;
             // Flowers: grass/dirt family.
             case POPPY, DANDELION, CORNFLOWER, OXEYE_DAISY, ALLIUM, AZURE_BLUET,
-                 BLUE_ORCHID, LILY_OF_THE_VALLEY, PINK_PETALS, TORCHFLOWER ->
+                 BLUE_ORCHID, LILY_OF_THE_VALLEY, PINK_PETALS, TORCHFLOWER, SUNFLOWER ->
                 ground == Material.GRASS_BLOCK || ground == Material.DIRT
                     || ground == Material.COARSE_DIRT || ground == Material.PODZOL
                     || ground == Material.ROOTED_DIRT;
@@ -364,7 +459,13 @@ public final class DecorationStage implements GenStage {
             // Lily pads: on water.
             case LILY_PAD -> ground == Material.WATER;
             // Vines, moss carpet: attach to solid (we're lenient).
-            case VINE, MOSS_CARPET, COCOA -> ground.isSolid();
+            case VINE, MOSS_CARPET, PALE_MOSS_CARPET, COCOA -> ground.isSolid();
+            // Spore blossom hangs — allow on solid.
+            case SPORE_BLOSSOM -> ground.isSolid();
+            // Dripstone: on solid.
+            case POINTED_DRIPSTONE, DRIPSTONE_BLOCK -> ground.isSolid();
+            // Sculk: on solid.
+            case SCULK, SCULK_VEIN -> ground.isSolid();
             // Snow: on solid.
             case SNOW -> ground.isSolid();
             // Underwater plants: seafloor.
