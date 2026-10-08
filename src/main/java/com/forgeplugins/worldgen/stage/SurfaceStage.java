@@ -54,7 +54,8 @@ public final class SurfaceStage implements GenStage {
                     ctx.data.setBlock(x, h - i, z, biome.subsurface());
                 }
 
-                if (biome == ForgeBiome.SNOWY && h + 1 < maxY) {
+                if ((biome == ForgeBiome.SNOWY || biome == ForgeBiome.SNOWY_TAIGA
+                        || biome == ForgeBiome.GROVE) && h + 1 < maxY) {
                     ctx.data.setBlock(x, h + 1, z, Material.SNOW);
                 }
             }

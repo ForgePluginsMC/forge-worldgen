@@ -23,7 +23,11 @@ public final class TreeStage implements GenStage {
     private static final long TREE_XOR = 0x7CEE5EEDL;
     private static final long POS_XOR = 0xB0517107L;
 
-    private enum TreeType { OAK, HUGE_OAK, PINE, REDWOOD, PALM }
+    private enum TreeType {
+        OAK, HUGE_OAK, BIRCH, DARK_OAK, JUNGLE_TREE,
+        PINE, SPRUCE, REDWOOD, PALM, CHERRY, MANGROVE,
+        GIANT_RED_MUSHROOM, GIANT_BROWN_MUSHROOM
+    }
 
     private record TreeSpot(int x, int z, int baseY, TreeType type, int trunkH,
                             int leanX, int leanZ, long bits) {}
@@ -80,11 +84,14 @@ public final class TreeStage implements GenStage {
         double typeRoll = SeedManager.toUnit(h1 ^ 0x51AB3F9CL);
         TreeType type = pickType(biome, typeRoll);
         int trunkH = switch (type) {
-            case OAK -> 5 + (int) (typeRoll * 97) % 3;
-            case HUGE_OAK -> 10 + (int) (typeRoll * 131) % 5;
-            case PINE -> 9 + (int) (typeRoll * 57) % 5;
+            case OAK, BIRCH, CHERRY -> 5 + (int) (typeRoll * 97) % 3;
+            case HUGE_OAK, DARK_OAK -> 10 + (int) (typeRoll * 131) % 5;
+            case PINE, SPRUCE -> 9 + (int) (typeRoll * 57) % 5;
+            case JUNGLE_TREE -> 12 + (int) (typeRoll * 149) % 8;
             case REDWOOD -> 22 + (int) (typeRoll * 211) % 9;
             case PALM -> 6 + (int) (typeRoll * 37) % 4;
+            case MANGROVE -> 5 + (int) (typeRoll * 43) % 3;
+            case GIANT_RED_MUSHROOM, GIANT_BROWN_MUSHROOM -> 6 + (int) (typeRoll * 29) % 4;
         };
         long bits = h2 ^ (h1 >>> 17);
         int leanX = (int) (bits % 3) - 1;
@@ -95,10 +102,21 @@ public final class TreeStage implements GenStage {
     private double treeDensity(@NotNull ForgeBiome biome) {
         return switch (biome) {
             case FOREST -> 0.50;
+            case BIRCH_FOREST -> 0.45;
+            case DARK_FOREST -> 0.55;
+            case JUNGLE -> 0.60;
+            case TAIGA -> 0.40;
+            case CHERRY_GROVE -> 0.35;
             case PLAINS -> 0.10;
+            case MEADOW -> 0.08;
             case SNOWY -> 0.22;
+            case SNOWY_TAIGA -> 0.30;
+            case GROVE -> 0.25;
             case MOUNTAINS -> 0.05;
             case BEACH -> 0.16;
+            case SWAMP -> 0.20;
+            case MANGROVE_SWAMP -> 0.35;
+            case MUSHROOM_FIELDS -> 0.25;
             default -> 0.0;
         };
     }
@@ -107,9 +125,18 @@ public final class TreeStage implements GenStage {
         return switch (biome) {
             case FOREST -> r < 0.25 ? TreeType.HUGE_OAK : r < 0.55 ? TreeType.OAK
                     : r < 0.75 ? TreeType.PINE : r < 0.85 ? TreeType.REDWOOD : TreeType.OAK;
-            case PLAINS -> r < 0.70 ? TreeType.OAK : TreeType.HUGE_OAK;
-            case SNOWY, MOUNTAINS -> r < 0.85 ? TreeType.PINE : TreeType.OAK;
+            case BIRCH_FOREST -> r < 0.80 ? TreeType.BIRCH : TreeType.OAK;
+            case DARK_FOREST -> r < 0.70 ? TreeType.DARK_OAK : TreeType.OAK;
+            case JUNGLE -> r < 0.70 ? TreeType.JUNGLE_TREE : r < 0.85 ? TreeType.OAK : TreeType.PINE;
+            case TAIGA, SNOWY_TAIGA, GROVE -> r < 0.80 ? TreeType.SPRUCE : TreeType.PINE;
+            case CHERRY_GROVE -> TreeType.CHERRY;
+            case PLAINS, MEADOW -> r < 0.70 ? TreeType.OAK : TreeType.HUGE_OAK;
+            case SNOWY -> r < 0.85 ? TreeType.PINE : TreeType.OAK;
+            case MOUNTAINS -> TreeType.PINE;
             case BEACH -> TreeType.PALM;
+            case SWAMP -> r < 0.70 ? TreeType.OAK : TreeType.BIRCH;
+            case MANGROVE_SWAMP -> TreeType.MANGROVE;
+            case MUSHROOM_FIELDS -> r < 0.50 ? TreeType.GIANT_RED_MUSHROOM : TreeType.GIANT_BROWN_MUSHROOM;
             default -> TreeType.OAK;
         };
     }
@@ -118,9 +145,17 @@ public final class TreeStage implements GenStage {
         switch (spot.type) {
             case OAK -> growOak(ctx, baseX, baseZ, spot, Material.OAK_LOG, Material.OAK_LEAVES, false);
             case HUGE_OAK -> growOak(ctx, baseX, baseZ, spot, Material.OAK_LOG, Material.OAK_LEAVES, true);
-            case PINE -> growPine(ctx, baseX, baseZ, spot);
+            case BIRCH -> growOak(ctx, baseX, baseZ, spot, Material.BIRCH_LOG, Material.BIRCH_LEAVES, false);
+            case DARK_OAK -> growOak(ctx, baseX, baseZ, spot, Material.DARK_OAK_LOG, Material.DARK_OAK_LEAVES, true);
+            case JUNGLE_TREE -> growJungle(ctx, baseX, baseZ, spot);
+            case PINE -> growPine(ctx, baseX, baseZ, spot, Material.SPRUCE_LOG, Material.SPRUCE_LEAVES);
+            case SPRUCE -> growSpruce(ctx, baseX, baseZ, spot);
             case REDWOOD -> growRedwood(ctx, baseX, baseZ, spot);
             case PALM -> growPalm(ctx, baseX, baseZ, spot);
+            case CHERRY -> growOak(ctx, baseX, baseZ, spot, Material.CHERRY_LOG, Material.CHERRY_LEAVES, false);
+            case MANGROVE -> growMangrove(ctx, baseX, baseZ, spot);
+            case GIANT_RED_MUSHROOM -> growGiantMushroom(ctx, baseX, baseZ, spot, true);
+            case GIANT_BROWN_MUSHROOM -> growGiantMushroom(ctx, baseX, baseZ, spot, false);
         }
     }
 
@@ -145,18 +180,104 @@ public final class TreeStage implements GenStage {
         }
     }
 
-    private void growPine(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {
+    private void growPine(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot,
+                          @NotNull Material log, @NotNull Material leaves) {
         int top = spot.baseY + spot.trunkH;
         for (int i = 1; i <= spot.trunkH; i++) {
-            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z, Material.SPRUCE_LOG);
+            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z, log);
         }
         int layers = 4;
         for (int i = 0; i < layers; i++) {
             int y = spot.baseY + 3 + i * 2;
             if (y > top) break;
-            disc(ctx, baseX, baseZ, spot.x, y, spot.z, 3 - i, Material.SPRUCE_LEAVES);
+            disc(ctx, baseX, baseZ, spot.x, y, spot.z, 3 - i, leaves);
+        }
+        leaf(ctx, baseX, baseZ, spot.x, top + 1, spot.z, leaves);
+    }
+
+    private void growSpruce(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {
+        // Tall spruce: straight trunk with dense conical layers.
+        int top = spot.baseY + spot.trunkH;
+        for (int i = 1; i <= spot.trunkH; i++) {
+            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z, Material.SPRUCE_LOG);
+        }
+        for (int y = spot.baseY + 2; y <= top; y += 2) {
+            int r = Math.max(1, (top - y) / 2 + 1);
+            disc(ctx, baseX, baseZ, spot.x, y, spot.z, Math.min(r, 3), Material.SPRUCE_LEAVES);
         }
         leaf(ctx, baseX, baseZ, spot.x, top + 1, spot.z, Material.SPRUCE_LEAVES);
+    }
+
+    private void growJungle(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {
+        // Tall jungle tree with a wide canopy and hanging vines.
+        int top = spot.baseY + spot.trunkH;
+        for (int i = 1; i <= spot.trunkH; i++) {
+            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z, Material.JUNGLE_LOG);
+            // Buttress roots at the base.
+            if (i <= 3) {
+                wood(ctx, baseX, baseZ, spot.x + 1, spot.baseY + i, spot.z, Material.JUNGLE_LOG);
+                wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z + 1, Material.JUNGLE_LOG);
+            }
+        }
+        // Wide canopy.
+        disc(ctx, baseX, baseZ, spot.x, top - 2, spot.z, 4, Material.JUNGLE_LEAVES);
+        disc(ctx, baseX, baseZ, spot.x, top - 1, spot.z, 4, Material.JUNGLE_LEAVES);
+        disc(ctx, baseX, baseZ, spot.x, top, spot.z, 3, Material.JUNGLE_LEAVES);
+        disc(ctx, baseX, baseZ, spot.x, top + 1, spot.z, 2, Material.JUNGLE_LEAVES);
+        // Hanging vines from the canopy edge.
+        long bits = spot.bits;
+        for (int k = 0; k < 4; k++) {
+            int vx = spot.x + (int) (bits % 7) - 3;
+            int vz = spot.z + (int) ((bits >> 8) % 7) - 3;
+            bits >>= 4;
+            int vy = top - 1;
+            int len = 2 + (int) (bits % 3);
+            for (int i = 0; i < len && vy - i > spot.baseY + 2; i++) {
+                leaf(ctx, baseX, baseZ, vx, vy - i, vz, Material.VINE);
+            }
+        }
+    }
+
+    private void growMangrove(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {
+        // Mangrove with prop roots arching over the mud.
+        int top = spot.baseY + spot.trunkH;
+        // Prop roots: 4 diagonal roots from trunk base.
+        int[][] rootDirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] d : rootDirs) {
+            for (int i = 1; i <= 3; i++) {
+                int rx = spot.x + d[0] * i;
+                int rz = spot.z + d[1] * i;
+                int ry = spot.baseY + 3 - i;
+                if (ry > spot.baseY) {
+                    wood(ctx, baseX, baseZ, rx, ry, rz, Material.MANGROVE_LOG);
+                }
+            }
+        }
+        for (int i = 1; i <= spot.trunkH; i++) {
+            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z, Material.MANGROVE_LOG);
+        }
+        disc(ctx, baseX, baseZ, spot.x, top - 1, spot.z, 3, Material.MANGROVE_LEAVES);
+        disc(ctx, baseX, baseZ, spot.x, top, spot.z, 3, Material.MANGROVE_LEAVES);
+        disc(ctx, baseX, baseZ, spot.x, top + 1, spot.z, 2, Material.MANGROVE_LEAVES);
+    }
+
+    private void growGiantMushroom(@NotNull ChunkContext ctx, int baseX, int baseZ,
+                                    @NotNull TreeSpot spot, boolean red) {
+        // Giant mushroom: thick stem with a broad cap.
+        Material stem = Material.MUSHROOM_STEM;
+        Material cap = red ? Material.RED_MUSHROOM_BLOCK : Material.BROWN_MUSHROOM_BLOCK;
+        int top = spot.baseY + spot.trunkH;
+        for (int i = 1; i <= spot.trunkH; i++) {
+            // 2x2 stem for girth.
+            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z, stem);
+            wood(ctx, baseX, baseZ, spot.x + 1, spot.baseY + i, spot.z, stem);
+            wood(ctx, baseX, baseZ, spot.x, spot.baseY + i, spot.z + 1, stem);
+            wood(ctx, baseX, baseZ, spot.x + 1, spot.baseY + i, spot.z + 1, stem);
+        }
+        // Cap: wide disc with a domed top.
+        disc(ctx, baseX, baseZ, spot.x, top, spot.z, 4, cap);
+        disc(ctx, baseX, baseZ, spot.x, top + 1, spot.z, 3, cap);
+        disc(ctx, baseX, baseZ, spot.x, top + 2, spot.z, 1, cap);
     }
 
     private void growRedwood(@NotNull ChunkContext ctx, int baseX, int baseZ, @NotNull TreeSpot spot) {
