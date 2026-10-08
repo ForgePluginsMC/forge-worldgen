@@ -19,7 +19,9 @@ structures, and mob spawning keep working untouched.
 
 ```
 generateNoise → TerrainStage → bedrock, stone/basalt body, oceans, crater lava
-generateSurface → SurfaceStage → per-biome palettes, snow, ash, scree
+generateSurface → SurfaceStage → dithered biome borders, per-biome palettes
+                → TreeStage → huge oaks, pines, redwoods, palms (border-safe)
+                → DecorationStage → grass, flowers, mushrooms, moss, berries…
 BiomeProvider → ForgeBiome → vanilla derivative (vanilla systems see vanilla)
 ```
 
@@ -28,8 +30,8 @@ BiomeProvider → ForgeBiome → vanilla derivative (vanilla systems see vanilla
   over the heightmap — same seed, same hash, on any server.
 - **Staged.** `GenStage` is a one-method interface; the pipeline runs noise
   stages in `generateNoise` and surface stages in `generateSurface`. v3.1
-  reserves slots for a custom `CarveStage` and continuation-safe object
-  placement.
+  added `TreeStage` and `DecorationStage`; a custom `CarveStage` and
+  continuation-safe object placement remain future work.
 - **Vanilla where it counts.** Caves, decorations, structures, and mobs stay
   vanilla (config-toggled). Our biomes each declare a vanilla derivative, so
   a `VOLCANIC` biome reads as `STONY_PEAKS` to vanilla systems.
@@ -63,8 +65,14 @@ generation:
 terrain:
   mountain-amplification: 1.0   # 0.0–2.5, mountain range height
   volcano-rarity: 0.06          # 0.0–1.0 chance per 1536-block cell
+  ruggedness: 1.0               # 0.0–2.0 medium detail (gated to land)
   rivers: true                  # carved river valleys
   scablands: true               # coulee channels on plateau country
+vegetation:
+  custom-trees: true            # huge oaks, pines, redwoods, palms
+  tree-density: 1.0             # 0.0–3.0
+  decorations: true              # grass, flowers, mushrooms, moss, berries…
+  decor-density: 1.0            # 0.0–3.0
 features:
   caves: true                   # vanilla cave carvers
   decorations: true              # vanilla ores, trees, flowers…
@@ -85,7 +93,7 @@ derivative (e.g. Volcanic → Stony Peaks, Scabland → Savanna).
 Direct-javac build (no Gradle daemon needed):
 
 ```bash
-./build.sh   # → ForgeWorldGen-3.0.0.jar
+./build.sh   # → ForgeWorldGen-3.1.0.jar
 ```
 
 Requires JDK 25 and the Paper 26.3 API jars in `~/workspace/.toolchains/paper-deps`
