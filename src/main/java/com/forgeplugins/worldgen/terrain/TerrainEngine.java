@@ -102,6 +102,22 @@ public final class TerrainEngine {
         return h;
     }
 
+    /** 0..1 mountain-massif strength at a column (the relief mask that builds the ranges). */
+    public double mountainFactorAt(int x, int z) {
+        double mask = relief.fbm(x / 2048.0, z / 2048.0, 3, 2.0, 0.5);
+        return sstep(0.22, 0.60, mask);
+    }
+
+    /**
+     * True if this column is in a true ocean (continental base below sea
+     * level), as opposed to an inland lake (a hill depression in land).
+     * Lakes get land biomes; only oceans get ocean biomes.
+     */
+    public boolean isOceanAt(int x, int z) {
+        double cont = continental.fbm(x / 4096.0, z / 4096.0, 4, 2.0, 0.5);
+        return config.seaLevel() + 3.0 + cont * 16.0 < config.seaLevel();
+    }
+
     /** Fine-detail noise for surface variation (ash fields, scree, basalt flats). */
     public double surfaceVariationAt(int x, int z) {
         return hills.noise(x / 24.0, z / 24.0);

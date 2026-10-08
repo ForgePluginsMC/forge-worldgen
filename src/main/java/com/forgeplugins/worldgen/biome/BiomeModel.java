@@ -35,23 +35,28 @@ public final class BiomeModel {
         if (terrain.riverCarveAt(x, z) > 0.55) {
             return ForgeBiome.RIVER;
         }
-        if (h < sea - 10) {
-            return ForgeBiome.DEEP_OCEAN;
-        }
+        // Oceans vs lakes: only true oceans (continental base below sea)
+        // get ocean biomes. Inland lakes get the surrounding land biome —
+        // otherwise lakes get deep-ocean water color ("oceans under land").
         if (h < sea) {
-            return ForgeBiome.OCEAN;
-        }
-        if (h <= sea + 1) {
+            if (terrain.isOceanAt(x, z)) {
+                return h < sea - 10 ? ForgeBiome.DEEP_OCEAN : ForgeBiome.OCEAN;
+            }
+            // Lake — fall through to land biome classification.
+        } else if (h <= sea + 1) {
             return ForgeBiome.BEACH;
         }
         if (terrain.scablandFactorAt(x, z) > 0.5) {
             return ForgeBiome.SCABLAND;
         }
-        if (h > 115) {
-            return ForgeBiome.MOUNTAINS;
-        }
         double temp = temperature.fbm(x / 2048.0, z / 2048.0, 3, 2.0, 0.5);
         double humid = humidity.fbm(x / 2048.0, z / 2048.0, 3, 2.0, 0.5);
+        // Mountains follow the relief mask that BUILDS them, not absolute
+        // height. Height-based classification put plains biomes on mountain
+        // terrain — "two different maps in one".
+        if (terrain.mountainFactorAt(x, z) > 0.35) {
+            return temp < -0.2 ? ForgeBiome.SNOWY : ForgeBiome.MOUNTAINS;
+        }
         if (temp < -0.45) {
             return ForgeBiome.SNOWY;
         }
