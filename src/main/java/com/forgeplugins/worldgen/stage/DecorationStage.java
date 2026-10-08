@@ -48,7 +48,7 @@ public final class DecorationStage implements GenStage {
                 double roll = SeedManager.toUnit(SeedManager.hash2(seed, wx, wz));
 
                 if (h < sea - 1) {
-                    underwater(ctx, x, h, z, roll, density);
+                    underwater(ctx, x, wx, h, z, wz, roll, density);
                     continue;
                 }
 
@@ -146,15 +146,28 @@ public final class DecorationStage implements GenStage {
         }
     }
 
-    private void underwater(@NotNull ChunkContext ctx, int x, int h, int z,
+    /**
+     * Underwater vegetation. Kelp and sea pickles are ocean-only — rivers
+     * and lakes getting kelp towers reads as "ocean under land". Seagrass
+     * is dense in oceans, sparse in rivers.
+     */
+    private void underwater(@NotNull ChunkContext ctx, int x, int wx, int h, int z, int wz,
                             double roll, double density) {
-        if (roll >= 0.55 * density) {
+        ForgeBiome biome = ctx.biomes.biomeAt(wx, wz);
+        boolean ocean = biome == ForgeBiome.OCEAN || biome == ForgeBiome.DEEP_OCEAN;
+        double chance = (ocean ? 0.55 : 0.18) * density;
+        if (roll >= chance) {
             return;
         }
         if (ctx.data.getType(x, h + 1, z) != Material.WATER) {
             return;
         }
         double pick = SeedManager.toUnit(SeedManager.hash2(ctx.seed ^ SEA_XOR, x, z));
+        if (!ocean) {
+            // Rivers and lakes: just a tuft of seagrass.
+            put(ctx, x, h + 1, z, Material.SEAGRASS);
+            return;
+        }
         if (pick < 0.62) {
             put(ctx, x, h + 1, z, Material.SEAGRASS);
         } else if (pick < 0.80) {

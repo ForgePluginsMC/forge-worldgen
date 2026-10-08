@@ -30,6 +30,11 @@ public final class BiomeModel {
         if (terrain.volcanoFactorAt(x, z) > 0.45) {
             return ForgeBiome.VOLCANIC;
         }
+        // Rivers before oceans — a deep river channel is still a river,
+        // not a deep ocean (otherwise river canyons get ocean water/kelp).
+        if (terrain.riverCarveAt(x, z) > 0.55) {
+            return ForgeBiome.RIVER;
+        }
         if (h < sea - 10) {
             return ForgeBiome.DEEP_OCEAN;
         }
@@ -41,9 +46,6 @@ public final class BiomeModel {
         }
         if (terrain.scablandFactorAt(x, z) > 0.5) {
             return ForgeBiome.SCABLAND;
-        }
-        if (terrain.riverCarveAt(x, z) > 0.55) {
-            return ForgeBiome.RIVER;
         }
         if (h > 115) {
             return ForgeBiome.MOUNTAINS;
