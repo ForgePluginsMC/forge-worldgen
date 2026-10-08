@@ -51,8 +51,22 @@ public final class TerrainStage implements GenStage {
                 int lava = ctx.terrain.lavaLevelAt(wx, wz);
                 if (lava > h && lava < maxY) {
                     ctx.data.setRegion(x, h + 1, z, x + 1, lava + 1, z + 1, Material.LAVA);
+                    // Clear above the lava lake.
+                    if (lava + 1 < maxY) {
+                        ctx.data.setRegion(x, lava + 1, z, x + 1, maxY, z + 1, Material.AIR);
+                    }
                 } else if (h < sea) {
                     ctx.data.setRegion(x, h + 1, z, x + 1, sea + 1, z + 1, Material.WATER);
+                    // Clear above the water — vanilla blocks must not remain
+                    // "on top of" our ocean ("land on top of water").
+                    if (sea + 1 < maxY) {
+                        ctx.data.setRegion(x, sea + 1, z, x + 1, maxY, z + 1, Material.AIR);
+                    }
+                } else {
+                    // Land: clear above the terrain surface.
+                    if (h + 1 < maxY) {
+                        ctx.data.setRegion(x, h + 1, z, x + 1, maxY, z + 1, Material.AIR);
+                    }
                 }
             }
         }

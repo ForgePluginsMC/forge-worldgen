@@ -302,7 +302,78 @@ public final class DecorationStage implements GenStage {
     }
 
     private void put(@NotNull ChunkContext ctx, int x, int y, int z, @NotNull Material material) {
+        // Plants must be on acceptable ground (vanilla survival rules).
+        // If the ground is wrong, don't place — a cactus on grass or a
+        // flower on stone breaks the illusion.
+        Material ground = ctx.data.getType(x, y - 1, z);
+        if (!canSurviveOn(material, ground)) {
+            return;
+        }
         ctx.data.setBlock(x, y, z, material);
+    }
+
+    /**
+     * Vanilla plant survival rules (simplified for worldgen). Returns true
+     * if the plant can be placed on the given ground block.
+     */
+    private static boolean canSurviveOn(@NotNull Material plant, @NotNull Material ground) {
+        return switch (plant) {
+            // Grasses and ferns: soil-like blocks.
+            case SHORT_GRASS, TALL_GRASS, FERN, LARGE_FERN ->
+                ground == Material.GRASS_BLOCK || ground == Material.DIRT
+                    || ground == Material.COARSE_DIRT || ground == Material.PODZOL
+                    || ground == Material.ROOTED_DIRT || ground == Material.MOSS_BLOCK
+                    || ground == Material.MUD || ground == Material.MYCELIUM;
+            // Flowers: grass/dirt family.
+            case POPPY, DANDELION, CORNFLOWER, OXEYE_DAISY, ALLIUM, AZURE_BLUET,
+                 BLUE_ORCHID, LILY_OF_THE_VALLEY, PINK_PETALS, TORCHFLOWER ->
+                ground == Material.GRASS_BLOCK || ground == Material.DIRT
+                    || ground == Material.COARSE_DIRT || ground == Material.PODZOL
+                    || ground == Material.ROOTED_DIRT;
+            // Berry bushes and pumpkins/melons: soil.
+            case SWEET_BERRY_BUSH, PUMPKIN, MELON ->
+                ground == Material.GRASS_BLOCK || ground == Material.DIRT
+                    || ground == Material.COARSE_DIRT || ground == Material.PODZOL;
+            // Dead bushes: arid ground.
+            case DEAD_BUSH ->
+                ground == Material.SAND || ground == Material.RED_SAND
+                    || ground == Material.TERRACOTTA || ground == Material.DIRT
+                    || ground == Material.COARSE_DIRT || ground == Material.RED_TERRACOTTA
+                    || ground == Material.ORANGE_TERRACOTTA || ground == Material.YELLOW_TERRACOTTA;
+            // Cacti: sand only.
+            case CACTUS ->
+                ground == Material.SAND || ground == Material.RED_SAND;
+            // Sugar cane: soil/sand (water adjacency checked by vanilla on tick).
+            case SUGAR_CANE ->
+                ground == Material.SAND || ground == Material.RED_SAND
+                    || ground == Material.GRASS_BLOCK || ground == Material.DIRT
+                    || ground == Material.COARSE_DIRT || ground == Material.PODZOL;
+            // Mushrooms: mycelium/podzol (or dark — we assume shade).
+            case RED_MUSHROOM, BROWN_MUSHROOM ->
+                ground == Material.MYCELIUM || ground == Material.PODZOL
+                    || ground == Material.GRASS_BLOCK || ground == Material.DIRT;
+            // Bamboo: soil/sand.
+            case BAMBOO ->
+                ground == Material.GRASS_BLOCK || ground == Material.DIRT
+                    || ground == Material.COARSE_DIRT || ground == Material.PODZOL
+                    || ground == Material.SAND || ground == Material.MUD;
+            // Mangrove propagule: mud/soil.
+            case MANGROVE_PROPAGULE ->
+                ground == Material.MUD || ground == Material.DIRT
+                    || ground == Material.GRASS_BLOCK || ground == Material.CLAY;
+            // Lily pads: on water.
+            case LILY_PAD -> ground == Material.WATER;
+            // Vines, moss carpet: attach to solid (we're lenient).
+            case VINE, MOSS_CARPET, COCOA -> ground.isSolid();
+            // Snow: on solid.
+            case SNOW -> ground.isSolid();
+            // Underwater plants: seafloor.
+            case SEAGRASS, KELP, SEA_PICKLE,
+                 TUBE_CORAL, BRAIN_CORAL, BUBBLE_CORAL, FIRE_CORAL, HORN_CORAL ->
+                ground.isSolid();
+            // Default: allow (for blocks we didn't categorize).
+            default -> true;
+        };
     }
 
     private void column(@NotNull ChunkContext ctx, int x, int y, int z,

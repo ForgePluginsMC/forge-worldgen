@@ -34,7 +34,7 @@ public final class SurfaceStage implements GenStage {
                 int wx = baseX + x;
                 int wz = baseZ + z;
                 int h = Math.clamp(ctx.terrain.heightAt(wx, wz), minY + 1, maxY - 1);
-                ForgeBiome biome = blendedBiome(ctx, wx, wz);
+                ForgeBiome biome = ctx.biomes.biomeAt(wx, wz);
 
                 Material top = biome.surface();
                 double var = ctx.terrain.surfaceVariationAt(wx, wz);
