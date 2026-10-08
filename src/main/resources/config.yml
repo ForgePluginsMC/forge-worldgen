@@ -38,11 +38,11 @@ vegetation:
 
 features:
   # Vanilla cave carvers running on ForgeWorldGen terrain.
-  caves: true
+  caves: false
   # Vanilla decorations (ores, trees, flowers, etc.) on ForgeWorldGen terrain.
-  decorations: true
+  decorations: false
   # Vanilla structures (villages, etc.) on ForgeWorldGen terrain.
-  structures: true
+  structures: false
   # Mob spawning.
   mobs: true
 

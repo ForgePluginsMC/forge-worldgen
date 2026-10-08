@@ -1,5 +1,5 @@
 name: ForgeWorldGen
-version: '3.3.0'
+version: '3.3.1'
 main: com.forgeplugins.worldgen.ForgeWorldGen
 api-version: '26.3'
 author: Forge
