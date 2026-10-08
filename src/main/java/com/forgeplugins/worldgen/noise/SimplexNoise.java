@@ -7,7 +7,7 @@ package com.forgeplugins.worldgen.noise;
  * (Gustavson-style 2D simplex). The instance is immutable after construction:
  * {@link #noise(double, double)} and {@link #fbm(double, double, int, double, double)}
  * perform zero allocation and are safe to call from multiple threads, which
- * is what lets the chunk generator run with {@code isParallelCapable()}.
+ * is what lets chunk generation run on the server's parallel chunk threads.
  */
 public final class SimplexNoise {
 

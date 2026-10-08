@@ -1,18 +1,18 @@
 name: ForgeWorldGen
-version: '2.0.1'
+version: '3.0.0'
 main: com.forgeplugins.worldgen.ForgeWorldGen
 api-version: '26.3'
 author: Forge
-description: Vanilla-character terrain with one change — gentle smoothing. Vanilla biomes, trees, caves, structures.
+description: Staged-pipeline custom world generation — volcanoes, mountain ranges, rivers, scablands, custom biomes and surfaces.
 commands:
   fgen:
-    description: Manage ForgeWorldGen worlds and pre-generation
-    usage: /fgen <create|tp|pregen|cancel|reload>
+    description: Manage ForgeWorldGen worlds, pre-generation and verification
+    usage: /fgen <create|tp|pregen|cancel|reload|verify|biome>
     permission: fgen.tp
 permissions:
   fgen.admin:
-    description: Create worlds, pre-generate, cancel and reload ForgeWorldGen
+    description: Create worlds, pre-generate, cancel, reload and verify ForgeWorldGen
     default: op
   fgen.tp:
-    description: Teleport to ForgeWorldGen worlds
+    description: Teleport to ForgeWorldGen worlds and inspect biomes
     default: op

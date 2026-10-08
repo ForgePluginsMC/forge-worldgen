@@ -1,5 +1,6 @@
-package com.forgeplugins.worldgen;
+package com.forgeplugins.worldgen.world;
 
+import com.forgeplugins.worldgen.ForgeWorldGen;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;

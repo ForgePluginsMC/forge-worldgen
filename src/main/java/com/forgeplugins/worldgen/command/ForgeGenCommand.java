@@ -1,5 +1,9 @@
-package com.forgeplugins.worldgen;
+package com.forgeplugins.worldgen.command;
 
+import com.forgeplugins.worldgen.ForgeWorldGen;
+import com.forgeplugins.worldgen.biome.ForgeBiome;
+import com.forgeplugins.worldgen.world.PregenTask;
+import com.forgeplugins.worldgen.world.WorldManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -16,8 +20,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Handles {@code /fgen}: world creation, teleporting, pre-generation with
- * live speed readout, and config reloads.
+ * Handles {@code /fgen}: world creation, teleporting, pre-generation,
+ * config reloads, determinism verification and biome inspection.
  */
 public final class ForgeGenCommand implements CommandExecutor, TabCompleter {
 
@@ -46,6 +50,8 @@ public final class ForgeGenCommand implements CommandExecutor, TabCompleter {
             case "pregen" -> handlePregen(sender, args);
             case "cancel" -> handleCancel(sender);
             case "reload" -> handleReload(sender);
+            case "verify" -> handleVerify(sender, args);
+            case "biome" -> handleBiome(sender);
             default -> sendUsage(sender, label);
         }
         return true;
@@ -108,7 +114,6 @@ public final class ForgeGenCommand implements CommandExecutor, TabCompleter {
             return;
         }
         Location spawn = world.getSpawnLocation();
-        // Nudge out of solid ground: vanilla spawn search isn't run for custom worlds.
         Location target = world.getHighestBlockAt(spawn.getBlockX(), spawn.getBlockZ()).getLocation().add(0.5, 1.0, 0.5);
         player.teleport(target);
         plugin.tell(sender, "<green>Teleported to <white>" + world.getName() + "</white>.</green>");
@@ -166,8 +171,63 @@ public final class ForgeGenCommand implements CommandExecutor, TabCompleter {
             plugin.tell(sender, "<red>You don't have permission to reload.</red>");
             return;
         }
-        plugin.reload();
-        plugin.tell(sender, "<green>ForgeWorldGen config reloaded. New worlds use the new settings.</green>");
+        try {
+            plugin.reload();
+        } catch (IllegalArgumentException e) {
+            plugin.tell(sender, "<red>Config invalid: " + e.getMessage() + "</red>");
+            return;
+        }
+        plugin.tell(sender, "<green>ForgeWorldGen config reloaded — engines rebuilt. New chunks use the new settings.</green>");
+    }
+
+    /**
+     * Determinism proof: hashes the heightmap + biome grid for a seed.
+     * Run it twice on the same seed — identical hashes mean the generator
+     * is deterministic.
+     */
+    private void handleVerify(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(PERM_ADMIN)) {
+            plugin.tell(sender, "<red>You don't have permission to verify.</red>");
+            return;
+        }
+        long seed;
+        if (args.length >= 2) {
+            try {
+                seed = Long.parseLong(args[1]);
+            } catch (NumberFormatException e) {
+                plugin.tell(sender, "<red>Seed must be a number.</red>");
+                return;
+            }
+        } else if (sender instanceof Player player) {
+            seed = player.getWorld().getSeed();
+        } else {
+            plugin.tell(sender, "<yellow>Usage: /fgen verify <seed></yellow>");
+            return;
+        }
+        String hash = plugin.generator().verifyHash(seed, 128);
+        plugin.tell(sender, "<green>Determinism hash for seed <white>" + seed + "</white>:</green>");
+        plugin.tell(sender, "<gray><white>" + hash + "</white></gray>");
+        plugin.tell(sender, "<gray>Same seed ⇒ same hash, on any server, every time.</gray>");
+    }
+
+    /** Reports the ForgeWorldGen biome (and its vanilla derivative) at the player. */
+    private void handleBiome(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.tell(sender, "<red>Only players can inspect biomes.</red>");
+            return;
+        }
+        if (!sender.hasPermission(PERM_TP) && !sender.hasPermission(PERM_ADMIN)) {
+            plugin.tell(sender, "<red>You don't have permission to do that.</red>");
+            return;
+        }
+        Location loc = player.getLocation();
+        ForgeBiome biome = plugin.generator().biomeAt(
+                loc.getWorld().getSeed(), loc.getBlockX(), loc.getBlockZ());
+        int h = plugin.generator().heightAt(
+                loc.getWorld().getSeed(), loc.getBlockX(), loc.getBlockZ());
+        plugin.tell(sender, "<green>Biome: <white>" + biome.label()
+                + "</white> (vanilla sees <white>" + biome.vanillaLabel()
+                + "</white>), terrain height <white>" + h + "</white>.</green>");
     }
 
     private void sendUsage(CommandSender sender, String label) {
@@ -178,7 +238,9 @@ public final class ForgeGenCommand implements CommandExecutor, TabCompleter {
                 Component.text("  /" + label + " tp <world> - teleport to a world"),
                 Component.text("  /" + label + " pregen <world> <radius> - pre-generate with speed readout"),
                 Component.text("  /" + label + " cancel - stop a running pre-generation"),
-                Component.text("  /" + label + " reload - reload config.yml"));
+                Component.text("  /" + label + " reload - reload config.yml"),
+                Component.text("  /" + label + " verify [seed] - determinism hash for a seed"),
+                Component.text("  /" + label + " biome - inspect the biome at your feet"));
         for (Component line : lines) {
             sender.sendMessage(line);
         }
@@ -188,7 +250,7 @@ public final class ForgeGenCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
-            return filter(List.of("create", "tp", "pregen", "cancel", "reload"), args[0]);
+            return filter(List.of("create", "tp", "pregen", "cancel", "reload", "verify", "biome"), args[0]);
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("tp") || args[0].equalsIgnoreCase("pregen"))) {
             List<String> names = new ArrayList<>();

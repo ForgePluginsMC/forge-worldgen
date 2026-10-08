@@ -1,147 +1,99 @@
-<div align="center">
-
-![ForgeWorldGen logo](logo.png)
-
 # ForgeWorldGen
 
-[![Paper 26.3](https://img.shields.io/badge/Paper-26.3-blue)](https://papermc.io/)
-[![Java 25](https://img.shields.io/badge/Java-25-orange)](https://adoptium.net/)
-[![Version](https://img.shields.io/badge/version-2.0.0-gold)](https://github.com/ForgePluginsMC/forge-worldgen)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+![ForgeWorldGen](logo.png)
 
-**Vanilla-character terrain, gently smoothed. One change at a time.**
+[![Paper 26.3](https://img.shields.io/badge/Paper-26.3-blue)](https://papermc.io)
+[![Java 25](https://img.shields.io/badge/Java-25-orange)](https://adoptium.net)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-</div>
+A custom Minecraft world generator built as a **staged pipeline**: small,
+single-purpose generation stages (terrain → surface → …) running over a
+deterministic, seed-derived terrain engine. Volcanoes with lava-crater lakes,
+epic mountain ranges, carved river valleys, and scabland coulees — with our
+own biome model mapped to vanilla derivatives so vanilla decorations,
+structures, and mob spawning keep working untouched.
 
-## What it is
+*Not affiliated with MinecraftForge. "Forge" here is the author name.*
 
-ForgeWorldGen v2 is a Paper plugin that generates terrain with the look and
-proportions of vanilla Minecraft — rolling plains and hills, occasional
-mountain ranges, oceans and rivers — with exactly one deliberate change: a
-gentle smoothing pass over the heightfield, controlled by a single config
-value (`terrain.smoothing`).
+## How it works
 
-An honest note on the design: a Paper plugin cannot reach inside Mojang's
-generator to "smooth" it. So v2 implements its own terrain core tuned to
-vanilla's character, and leaves **everything else 100% vanilla**: biomes,
-surface painting, trees, caves, ores, decorations, structures, villages and
-mobs all come from the vanilla pipeline untouched.
+```
+generateNoise → TerrainStage → bedrock, stone/basalt body, oceans, crater lava
+generateSurface → SurfaceStage → per-biome palettes, snow, ash, scree
+BiomeProvider → ForgeBiome → vanilla derivative (vanilla systems see vanilla)
+```
 
-v2 is a deliberate reset. The v1.x line grew every feature imaginable —
-custom biomes, volcanoes, geysers, wheat fields, heat maps — and lost the
-plot. v2 deletes all of it and changes one thing at a time.
+- **Deterministic.** Every noise field derives from the world seed via
+  `SeedManager` (splitmix64 domains). `/fgen verify <seed>` prints a SHA-256
+  over the heightmap — same seed, same hash, on any server.
+- **Staged.** `GenStage` is a one-method interface; the pipeline runs noise
+  stages in `generateNoise` and surface stages in `generateSurface`. v3.1
+  reserves slots for a custom `CarveStage` and continuation-safe object
+  placement.
+- **Vanilla where it counts.** Caves, decorations, structures, and mobs stay
+  vanilla (config-toggled). Our biomes each declare a vanilla derivative, so
+  a `VOLCANIC` biome reads as `STONY_PEAKS` to vanilla systems.
 
-## Features
+![Seed 12345 overview](fgen30-seed12345-map.png)
+*Top-down render of seed 12345 (4096×4096 blocks): oceans, beaches, a major
+mountain range, river valleys, scabland flats.*
 
-- **Vanilla-look terrain core** — continental landmasses, gentle hills, rare
-  mountain ranges, carved rivers, oceans at sea level 62
-- **One smoothing control** — `terrain.smoothing` (0.0–1.0, default 0.35):
-  a gentle low-pass over the heightfield that softens jagged edges while
-  keeping the land's character
-- **Fully vanilla everything else** — the plugin does not override the biome
-  provider or the surface step, so vanilla biomes, trees, villages, caves
-  and mobs behave exactly as in a normal world
-- **Fast** — original allocation-free simplex/fBm noise; the whole terrain
-  core is a pure function of coordinates and seed, chunk-border safe and
-  deterministic
-- **World management** — `/fgen create` spins up named worlds with the
-  generator attached (and re-attached automatically after restarts)
-- **Pre-generation with live speed readout** — `/fgen pregen` reports
-  chunks/sec as it works
-
-## Requirements
-
-- Paper 26.3 (or a fork with the Paper 26.3 API)
-- Java 25
-
-## Installation
-
-1. Drop `ForgeWorldGen-2.0.0.jar` into your server's `plugins/` folder.
-2. Restart the server.
-3. Create a world: `/fgen create myworld` (console or in-game).
-
-## Commands
+## Commands (`/fgen`)
 
 | Command | Permission | Description |
 |---|---|---|
 | `/fgen create <name> [seed]` | `fgen.admin` | Create a ForgeWorldGen world |
 | `/fgen tp <world>` | `fgen.tp` | Teleport to a world |
-| `/fgen pregen <world> <radius>` | `fgen.admin` | Pre-generate chunks with live chunks/sec readout (max 48) |
+| `/fgen pregen <world> <radius>` | `fgen.admin` | Pre-generate chunks (spiral, live speed readout) |
 | `/fgen cancel` | `fgen.admin` | Stop a running pre-generation |
-| `/fgen reload` | `fgen.admin` | Reload config.yml (applies to new chunks) |
-
-Tab completion is provided for subcommands and world names.
+| `/fgen reload` | `fgen.admin` | Reload config, rebuild engines live |
+| `/fgen verify [seed]` | `fgen.admin` | Determinism hash for a seed |
+| `/fgen biome` | `fgen.tp` | Inspect the biome at your feet |
 
 ## Permissions
 
-| Permission | Default | Description |
-|---|---|---|
-| `fgen.admin` | op | Create worlds, pre-generate, cancel, reload |
-| `fgen.tp` | op | Teleport to ForgeWorldGen worlds |
+- `fgen.admin` (default: op) — create, pregen, cancel, reload, verify
+- `fgen.tp` (default: op) — teleport, biome inspection
 
-## Configuration (config.yml)
+## Configuration (`config.yml`)
 
 ```yaml
 generation:
-  sea-level: 62          # ocean level; terrain below this fills with water
-
+  sea-level: 62                 # ocean level
 terrain:
-  smoothing: 0.35        # gentle low-pass on the heightfield, 0.0 (off) to 1.0
-
+  mountain-amplification: 1.0   # 0.0–2.5, mountain range height
+  volcano-rarity: 0.06          # 0.0–1.0 chance per 1536-block cell
+  rivers: true                  # carved river valleys
+  scablands: true               # coulee channels on plateau country
 features:
-  caves: true            # vanilla cave carvers
-  decorations: true      # vanilla decorations (ores, trees, flowers…)
-  structures: true       # vanilla structures (villages…)
-  mobs: true             # mob spawning
-
+  caves: true                   # vanilla cave carvers
+  decorations: true              # vanilla ores, trees, flowers…
+  structures: true               # vanilla structures
+  mobs: true                    # mob spawning
 world:
-  auto-manage: true      # re-attach the generator to managed worlds on startup
-
-managed-worlds: []       # maintained by the plugin; hands off
-
-messages:
-  prefix: "<gold>[ForgeWorldGen]</gold> "
+  auto-manage: true             # re-attach generator on restart
 ```
+
+## Biomes
+
+Plains, Forest, Desert, Mountains, Volcanic, Scabland, Ocean, Deep Ocean,
+Beach, River, Snowy — each with a hand-tuned surface palette and a vanilla
+derivative (e.g. Volcanic → Stony Peaks, Scabland → Savanna).
 
 ## Building
 
-The sandbox cannot run the Gradle daemon (loopback TCP is intercepted), so
-`build.sh` compiles with `javac` directly against the Paper API jars:
+Direct-javac build (no Gradle daemon needed):
 
-```sh
-./build.sh   # produces ForgeWorldGen-<version>.jar, -Werror clean
+```bash
+./build.sh   # → ForgeWorldGen-3.0.0.jar
 ```
 
-`build.gradle.kts` is the canonical build for machines with a working
-Gradle (Gradle 9.7.1, Java 25). Keep both in sync.
+Requires JDK 25 and the Paper 26.3 API jars in `~/workspace/.toolchains/paper-deps`
+(see `build.sh`). Compiled with `-Werror -Xlint:deprecation`, nullness
+annotations throughout, zero deprecated APIs.
 
-## How the terrain core works
+## Design notes
 
-`TerrainModel` (about 100 lines, readable in one sitting) builds each
-column's height from four noise fields:
-
-- **continental** — very-low-frequency landmasses and oceans
-- **hills** — rolling mid-frequency relief plus a fine detail octave
-- **relief** — a low-frequency mask; mountains only appear where it runs
-  high, so ranges are rare and regional
-- **rivers** — shallow channels carved where the river noise crosses zero
-
-`heightAt()` blends the raw height with a 5×5 box blur by `smoothing`.
-Everything is deterministic per seed and identical on both sides of every
-chunk border.
-
-## Roadmap
-
-- One change at a time. The next change is chosen by testing, not by
-  brainstorming.
-- Future idea: Nether generation with no bedrock roof — a black void sky
-  (like the End's), lava lakes, basalt.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
----
-
-*ForgeWorldGen is a third-party Paper plugin. Not affiliated with
-MinecraftForge, Mojang, or Microsoft.*
+See [DESIGN.md](DESIGN.md) for the architecture (the five ideas taken from
+studying Iris's engine, reimplemented here in original code — no Iris/VolmLib
+source is used or vendored).

@@ -1,5 +1,6 @@
-package com.forgeplugins.worldgen;
+package com.forgeplugins.worldgen.world;
 
+import com.forgeplugins.worldgen.ForgeWorldGen;
 import com.forgeplugins.worldgen.gen.ForgeChunkGenerator;
 import java.util.HashSet;
 import java.util.List;

@@ -1,17 +1,20 @@
 package com.forgeplugins.worldgen;
 
+import com.forgeplugins.worldgen.command.ForgeGenCommand;
+import com.forgeplugins.worldgen.config.GenConfig;
 import com.forgeplugins.worldgen.gen.ForgeChunkGenerator;
-import com.forgeplugins.worldgen.gen.GenSettings;
+import com.forgeplugins.worldgen.world.WorldManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
 /**
- * ForgeWorldGen v2 — vanilla-character terrain, gently smoothed.
+ * ForgeWorldGen v3 — staged-pipeline custom world generation.
  *
  * <p>Registers the {@code /fgen} command and re-attaches the custom
- * generator to managed worlds on startup so restarts never silently fall
- * back to vanilla generation at world borders.
+ * generator (plus biome provider) to managed worlds on startup so restarts
+ * never silently fall back to vanilla generation at world borders.
  */
 public final class ForgeWorldGen extends JavaPlugin {
 
@@ -24,7 +27,7 @@ public final class ForgeWorldGen extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
-        this.generator = new ForgeChunkGenerator(GenSettings.fromConfig(getConfig()));
+        this.generator = new ForgeChunkGenerator(GenConfig.fromConfig(getConfig()));
         this.worlds = new WorldManager(this, generator);
 
         var handler = new ForgeGenCommand(this, worlds);
@@ -37,7 +40,7 @@ public final class ForgeWorldGen extends JavaPlugin {
         }
 
         worlds.reattachManaged();
-        getLogger().info("Enabled v2: vanilla-character terrain, gently smoothed.");
+        getLogger().info("Enabled v3: staged-pipeline terrain (volcanoes, ranges, rivers, scablands).");
     }
 
     @Override
@@ -47,22 +50,22 @@ public final class ForgeWorldGen extends JavaPlugin {
         }
     }
 
-    /** Reloads config.yml and applies new generation settings live. */
+    /** Reloads config.yml and rebuilds generation engines live. */
     public void reload() {
         reloadConfig();
         if (generator != null) {
-            generator.updateSettings(GenSettings.fromConfig(getConfig()));
+            generator.updateConfig(GenConfig.fromConfig(getConfig()));
         }
     }
 
-    public ForgeChunkGenerator generator() {
+    public @NotNull ForgeChunkGenerator generator() {
         if (generator == null) {
             throw new IllegalStateException("ForgeWorldGen not enabled yet");
         }
         return generator;
     }
 
-    public WorldManager worlds() {
+    public @NotNull WorldManager worlds() {
         if (worlds == null) {
             throw new IllegalStateException("ForgeWorldGen not enabled yet");
         }
@@ -75,7 +78,7 @@ public final class ForgeWorldGen extends JavaPlugin {
         audience.sendMessage(MINI_MESSAGE.deserialize(prefix + miniMessage));
     }
 
-    public Component prefixed(String miniMessage) {
+    public @NotNull Component prefixed(String miniMessage) {
         String prefix = getConfig().getString("messages.prefix", "<gold>[ForgeWorldGen]</gold> ");
         return MINI_MESSAGE.deserialize(prefix + miniMessage);
     }

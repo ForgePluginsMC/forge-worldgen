@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ForgeWorldGen direct-javac build.
+# ForgeWorldGen v3 direct-javac build.
 #
 # WHY: this sandbox blocks the Gradle daemon's loopback TCP, so Gradle cannot
 # run here at all. This script compiles with javac directly against the jars in
@@ -9,9 +9,9 @@ set -euo pipefail
 
 export JAVA_HOME="$HOME/workspace/.toolchains/jdk-25.0.4.1+1"
 DEPS="$HOME/workspace/.toolchains/paper-deps"
-SRC="$HOME/workspace/forge-worldgen"
+SRC="$HOME/workspace/forge-worldgen-v3"
 OUT="$SRC/build"
-VERSION="2.0.1"
+VERSION="3.0.0"
 JAVAC="$JAVA_HOME/bin/javac"
 JAR="$JAVA_HOME/bin/jar"
 CP=$(ls "$DEPS"/*.jar | tr '\n' ':')
@@ -24,4 +24,3 @@ cp -r "$OUT/classes"/. "$OUT/stage"/
 cp "$SRC/src/main/resources/plugin.yml" "$SRC/src/main/resources/config.yml" "$OUT/stage"/
 ( cd "$OUT/stage" && $JAR --create --file "$SRC/ForgeWorldGen-$VERSION.jar" . )
 echo "built ForgeWorldGen-$VERSION.jar"
-$JAR --list --file "$SRC/ForgeWorldGen-$VERSION.jar"

@@ -1,112 +1,146 @@
 package com.forgeplugins.worldgen.gen;
 
-import java.util.Random;
+import com.forgeplugins.worldgen.biome.BiomeModel;
+import com.forgeplugins.worldgen.biome.ForgeBiome;
+import com.forgeplugins.worldgen.config.GenConfig;
+import com.forgeplugins.worldgen.pipeline.ChunkContext;
+import com.forgeplugins.worldgen.pipeline.GenPipeline;
+import com.forgeplugins.worldgen.stage.SurfaceStage;
+import com.forgeplugins.worldgen.stage.TerrainStage;
+import com.forgeplugins.worldgen.terrain.TerrainEngine;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Biome;
+import org.bukkit.generator.BiomeProvider;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.generator.WorldInfo;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Random;
+
 /**
- * ForgeWorldGen v2 generator: our own heightfield, vanilla everything else.
+ * ForgeWorldGen v3 generator — a staged pipeline over a deterministic
+ * terrain engine, instead of v2's single heightfield method.
  *
- * <p>The single change v2 makes over a normal world: terrain heights come
- * from {@link TerrainModel} (vanilla-proportioned, gently smoothed) instead
- * of Mojang's noise router. Biomes, surface painting, caves, decorations,
- * structures and mobs are 100% vanilla — we deliberately do not override
- * {@code getDefaultBiomeProvider}, so vanilla's biome source applies, and the
- * vanilla surface step paints dirt/grass/sand on top of our stone.
- *
- * <p>The instance is stateless apart from the lazily-built, immutable
- * {@link TerrainModel}, so it is safe for parallel chunk generation.
+ * <p>Noise stages run in {@link #generateNoise}; the surface stage runs in
+ * {@link #generateSurface} (after vanilla's surface step, which it
+ * repaints). Biomes come from our own {@link ForgeBiomeProvider}, each
+ * mapped to a vanilla derivative so vanilla decorations, structures and
+ * mob spawning keep working. Caves, decorations, structures and mobs stay
+ * vanilla, toggled by config.
  */
 public final class ForgeChunkGenerator extends ChunkGenerator {
 
-    private final Object modelLock = new Object();
-    private volatile TerrainModel model;
-    private volatile GenSettings settings;
+    /** Everything built for one world seed. Engines are immutable. */
+    private record EngineSet(
+            TerrainEngine terrain,
+            BiomeModel biomes,
+            GenPipeline pipeline,
+            ForgeBiomeProvider provider) {}
 
-    public ForgeChunkGenerator(@NotNull GenSettings settings) {
-        this.settings = settings;
+    private final Object engineLock = new Object();
+    private final Map<Long, EngineSet> engines = new HashMap<>();
+    private volatile GenConfig config;
+
+    public ForgeChunkGenerator(@NotNull GenConfig config) {
+        this.config = config;
     }
 
-    /** Applies new settings (e.g. after /fgen reload); models rebuild lazily. */
-    public void updateSettings(@NotNull GenSettings next) {
-        synchronized (modelLock) {
-            this.settings = next;
-            this.model = null;
+    /** Applies new config (e.g. after /fgen reload); engines rebuild lazily. */
+    public void updateConfig(@NotNull GenConfig next) {
+        synchronized (engineLock) {
+            this.config = next;
+            this.engines.clear();
         }
     }
 
-    private @NotNull TerrainModel modelFor(@NotNull WorldInfo info) {
-        TerrainModel current = model;
-        long seed = info.getSeed();
-        GenSettings snap = settings;
-        if (current == null || current.seed() != seed) {
-            synchronized (modelLock) {
-                current = model;
-                if (current == null || current.seed() != seed) {
-                    current = new TerrainModel(seed, snap.seaLevel(), snap.smoothing());
-                    model = current;
+    private @NotNull EngineSet enginesFor(long seed) {
+        EngineSet set = engines.get(seed);
+        if (set == null) {
+            synchronized (engineLock) {
+                set = engines.get(seed);
+                if (set == null) {
+                    GenConfig snap = config;
+                    TerrainEngine terrain = new TerrainEngine(seed, snap);
+                    BiomeModel biomes = new BiomeModel(seed, terrain);
+                    GenPipeline pipeline = new GenPipeline(
+                            List.of(new TerrainStage()),
+                            List.of(new SurfaceStage()));
+                    set = new EngineSet(terrain, biomes, pipeline,
+                            new ForgeBiomeProvider(biomes));
+                    engines.put(seed, set);
                 }
             }
         }
-        return current;
+        return set;
     }
 
     @Override
     public void generateNoise(@NotNull WorldInfo worldInfo, @NotNull Random random,
                               int chunkX, int chunkZ, @NotNull ChunkData chunkData) {
-        TerrainModel terrain = modelFor(worldInfo);
-        long seed = terrain.seed();
-        int sea = terrain.seaLevel();
-        int minY = chunkData.getMinHeight();
-        int maxY = chunkData.getMaxHeight();
-        int baseX = chunkX << 4;
-        int baseZ = chunkZ << 4;
+        long seed = worldInfo.getSeed();
+        EngineSet set = enginesFor(seed);
+        set.pipeline().runNoise(new ChunkContext(chunkX, chunkZ, seed, chunkData,
+                set.terrain(), set.biomes(), config));
+    }
 
-        for (int z = 0; z < 16; z++) {
-            for (int x = 0; x < 16; x++) {
-                int wx = baseX + x;
-                int wz = baseZ + z;
-                int h = terrain.heightAt(wx, wz);
-                if (h < minY + 6) {
-                    h = minY + 6;
-                } else if (h > maxY - 1) {
-                    h = maxY - 1;
-                }
+    @Override
+    public void generateSurface(@NotNull WorldInfo worldInfo, @NotNull Random random,
+                                int chunkX, int chunkZ, @NotNull ChunkData chunkData) {
+        long seed = worldInfo.getSeed();
+        EngineSet set = enginesFor(seed);
+        set.pipeline().runSurface(new ChunkContext(chunkX, chunkZ, seed, chunkData,
+                set.terrain(), set.biomes(), config));
+    }
 
-                // Bedrock floor with a ragged second layer.
-                chunkData.setBlock(x, minY, z, Material.BEDROCK);
-                int stoneStart = minY + 1;
-                if ((hash2(seed, wx, wz) & 1) == 0) {
-                    chunkData.setBlock(x, minY + 1, z, Material.BEDROCK);
-                    stoneStart = minY + 2;
-                }
+    @Override
+    public @Nullable BiomeProvider getDefaultBiomeProvider(@NotNull WorldInfo worldInfo) {
+        return enginesFor(worldInfo.getSeed()).provider();
+    }
 
-                // Solid stone up to the surface. The vanilla surface step
-                // (left enabled) paints dirt/grass/sand per vanilla biome.
-                if (h >= stoneStart) {
-                    chunkData.setRegion(x, stoneStart, z, x + 1, h + 1, z + 1, Material.STONE);
-                }
-
-                // Ocean fill.
-                if (h < sea) {
-                    chunkData.setRegion(x, h + 1, z, x + 1, sea + 1, z + 1, Material.WATER);
+    /**
+     * Determinism proof (the Iris goldenhash idea, simplified): SHA-256 over
+     * a grid of heights + biome ordinals at fixed coordinates. The same seed
+     * always yields the same hash — on any server, any run.
+     */
+    public @NotNull String verifyHash(long seed, int halfExtentBlocks) {
+        EngineSet set = enginesFor(seed);
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            ByteBuffer buf = ByteBuffer.allocate(16);
+            for (int dz = -halfExtentBlocks; dz <= halfExtentBlocks; dz += 4) {
+                for (int dx = -halfExtentBlocks; dx <= halfExtentBlocks; dx += 4) {
+                    int h = set.terrain().heightAt(dx, dz);
+                    int b = set.biomes().biomeAt(dx, dz).ordinal();
+                    buf.clear();
+                    sha.update(buf.putInt(dx).putInt(dz).putInt(h).putInt(b).array());
                 }
             }
+            StringBuilder hex = new StringBuilder();
+            for (byte by : sha.digest()) {
+                hex.append(String.format("%02x", by));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
         }
     }
 
-    /** Deterministic 64-bit mix of seed and column coordinates. */
-    private static long hash2(long seed, int x, int z) {
-        long h = seed ^ (x * 0x9E3779B1L) ^ (z * 0x85EBCA6BL);
-        h ^= h >>> 29;
-        h *= 0xBF58476D1CE4E5B9L;
-        h ^= h >>> 32;
-        return h;
+    /** Biome lookup for commands (e.g. /fgen biome). */
+    public @NotNull ForgeBiome biomeAt(long seed, int x, int z) {
+        return enginesFor(seed).biomes().biomeAt(x, z);
+    }
+
+    /** Terrain height lookup for commands. */
+    public int heightAt(long seed, int x, int z) {
+        return enginesFor(seed).terrain().heightAt(x, z);
     }
 
     @Override
@@ -116,8 +150,8 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
 
     @Override
     public @Nullable Location getFixedSpawnLocation(@NotNull World world, @NotNull Random random) {
-        // Find pleasant low land near the origin for first join.
-        TerrainModel terrain = modelFor(world);
+        // Pleasant low land near the origin for first join.
+        TerrainEngine terrain = enginesFor(world.getSeed()).terrain();
         int sea = terrain.seaLevel();
         for (int ring = 0; ring < 12; ring++) {
             for (int dx = -ring * 8; dx <= ring * 8; dx += 8) {
@@ -134,18 +168,11 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
         return null; // fall back to vanilla spawn search
     }
 
-    // NOTE: ChunkGenerator.isParallelCapable() and shouldGenerateBedrock()
-    // are deprecated in Paper 26.3 with no replacement. We do not override
-    // them: bedrock is placed inside generateNoise's single pass, and the
-    // generator is stateless/thread-safe regardless of the old parallel hint.
-    //
-    // shouldGenerateSurface() defaults to FALSE in Paper 26.3 (verified via
-    // javap on the API jar) — we must explicitly return true or the vanilla
-    // surface step never runs and the world stays bare stone.
-    //
-    // We do not override getDefaultBiomeProvider (vanilla biomes apply).
-    // Caves, decorations, structures and mobs run through the vanilla
-    // pipeline, toggled by config.
+    // NOTE (from v2, still true): Paper 26.3's shouldGenerateSurface()
+    // defaults to FALSE (verified via javap) — we must return true or no
+    // surface step runs at all. We do NOT override the deprecated
+    // isParallelCapable()/shouldGenerateBedrock(): bedrock is placed in the
+    // terrain stage, and the generator is stateless/thread-safe regardless.
     @Override
     public boolean shouldGenerateSurface() {
         return true;
@@ -158,21 +185,21 @@ public final class ForgeChunkGenerator extends ChunkGenerator {
 
     @Override
     public boolean shouldGenerateCaves() {
-        return settings.caves();
+        return config.caves();
     }
 
     @Override
     public boolean shouldGenerateDecorations() {
-        return settings.decorations();
+        return config.decorations();
     }
 
     @Override
     public boolean shouldGenerateStructures() {
-        return settings.structures();
+        return config.structures();
     }
 
     @Override
     public boolean shouldGenerateMobs() {
-        return settings.mobs();
+        return config.mobs();
     }
 }

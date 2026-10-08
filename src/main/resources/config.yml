@@ -1,7 +1,10 @@
 # ============================================================
-# ForgeWorldGen v2 configuration — back to basics.
-# One change over vanilla: gentle terrain smoothing.
-# Everything else (biomes, trees, caves, structures) is vanilla.
+# ForgeWorldGen v3 configuration — staged-pipeline world generation.
+#
+# Terrain comes from our own engine (volcanoes, mountain ranges, rivers,
+# scabland coulees); biomes are ours too, each mapped to a vanilla
+# derivative so vanilla decorations, structures and mobs keep working.
+# Caves, decorations, structures and mobs stay vanilla (toggled below).
 # ============================================================
 
 generation:
@@ -9,9 +12,15 @@ generation:
   sea-level: 62
 
 terrain:
-  # Gentle low-pass smoothing on the heightfield, 0.0 (off) to 1.0.
-  # 0.35 is the subtle default: softens jagged edges, keeps character.
-  smoothing: 0.35
+  # Mountain range amplification, 0.0 (flat) to 2.5 (epic). 1.0 is default.
+  mountain-amplification: 1.0
+  # Chance per 1536-block grid cell of holding a volcano, 0.0 to 1.0.
+  # 0.06 ≈ one volcano every ~40x40 chunks on average.
+  volcano-rarity: 0.06
+  # River valleys carved into the terrain.
+  rivers: true
+  # Scabland coulee channels on plateau country (Dry Falls flavor).
+  scablands: true
 
 features:
   # Vanilla cave carvers running on ForgeWorldGen terrain.

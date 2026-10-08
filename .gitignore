@@ -1,20 +1,2 @@
-# Java
 build/
 *.jar
-*.class
-out/
-
-# Gradle
-.gradle/
-
-# IDE
-.idea/
-*.iml
-.vscode/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
